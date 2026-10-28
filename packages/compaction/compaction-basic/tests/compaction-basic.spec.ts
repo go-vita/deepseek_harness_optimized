@@ -2082,12 +2082,14 @@ describe('automatic listener and loader composition', () => {
     expect(session.surface.nodes).toContain(retainedSeq)
   })
 
-  it('summarizes only an older balanced portion for the Codex input character cap', async () => {
+  it.each(['context_length_exceeded: codex_input_too_large',
+    'cli_error: {\"message\":\"Your input exceeds the context window of this model.\"}',
+  ])('summarizes a balanced older portion when Codex rejects input: %s', async (message) => {
     const ctx = createContext(100_000)
     const compact = new TestCompactionEngine(ctx, { headroomTokens: 0, maxTokens: 8192, thresholdRatio: 1 })
     const session = conversation(8, 'history '.repeat(10000))
     const original = [...session.surface.nodes]
-    const decision = await recover(ctx, agent(session, MODEL), overflow('context_length_exceeded: codex_input_too_large'))
+    const decision = await recover(ctx, agent(session, MODEL), overflow(message))
     expect(decision).toBe(true)
     expect(compact.calls).toHaveLength(1)
     // Several of the newest complete turns remain available verbatim.

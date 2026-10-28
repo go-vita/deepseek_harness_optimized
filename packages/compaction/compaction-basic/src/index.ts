@@ -225,10 +225,10 @@ export class BasicCompactionEngine extends CompactionEngine {
       const generation = agent.session.surface.replaceGeneration
       let result: CompactionResult | null
       try {
-        // A CLI request character cap can also reject the summarization call if
-        // the entire history is sent back for compaction. Summarize a balanced
-        // older portion first and retain the recent tail instead.
-        result = failure.message.includes('codex_input_too_large')
+        // Oversized input can also reject summarization of the full history.
+        // Compact an older balanced portion and retain the recent tail.
+        result = (failure.message.includes('codex_input_too_large')
+          || /input exceeds the context window/i.test(failure.message))
           ? await this.compactIfNeeded(agent, 'context-overflow', signal, true)
           : await this.compactIfNeeded(agent, 'context-overflow', signal)
       } catch (recoveryError: unknown) {
