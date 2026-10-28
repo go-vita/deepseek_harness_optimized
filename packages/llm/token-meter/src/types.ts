@@ -9,8 +9,11 @@ import type { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session/type
 
 export type { ContextBreakdownProjection, ContextPressureProjection, TokenUsageProjection } from './projection.ts'
 
-/** Token-meter plugin configuration; the fixed estimator has no settings. */
-export type TokenMeterConfig = Record<string, never>
+/** Token-meter plugin configuration; billing usage can be excluded from context estimates. */
+export interface TokenMeterConfig {
+  /** Routes whose usage aggregates multiple upstream samples rather than one context. */
+  cumulativeUsageProviders?: string[]
+}
 
 /** The baseline from which a signed surface delta produces current pressure. */
 export type TokenMeasurementBaseline =

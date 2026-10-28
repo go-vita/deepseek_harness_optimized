@@ -31,7 +31,7 @@ import { freezeMessage } from './message.ts'
 import { resolveRetryPolicy } from './retry-policy.ts'
 import type { ResolvedRetryPolicy } from './retry-policy.ts'
 import type { ProviderRequestId } from './brand.ts'
-import { callConfigEquals } from './call-config.ts'
+import { callConfigEquals, isAgentLoopRequest, markAgentLoopRequest } from './call-config.ts'
 import type { ConfigureCall, LlmCallConfig, LlmCallConfigAdapterDefaults } from './call-config.ts'
 import { HarnessError, INVALID_CREDENTIAL_CODE } from './error.ts'
 import { normalizeLlmFailure } from './adapter-failure.ts'
@@ -833,6 +833,8 @@ export class LlmRuntime extends TypertRemoteService {
       ...inputModalities === undefined ? {} : { inputModalities },
       ...context === undefined ? {} : { context: { contextWindow: context.contextWindow } },
       ...defaultMaxTokens === undefined ? {} : { defaultMaxTokens },
+      ...resolved.supportsServiceTier === true ? { supportsServiceTier: true } : {},
+      ...resolved.defaultServiceTier === undefined ? {} : { defaultServiceTier: resolved.defaultServiceTier },
       ...resolved.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: resolved.systemPromptUpdate },
       ...resolved.toolUpdate === undefined ? {} : { toolUpdate: resolved.toolUpdate },
     }
@@ -912,6 +914,9 @@ export class LlmRuntime extends TypertRemoteService {
     const defaulted = config.maxTokens === undefined && info.defaultMaxTokens !== undefined
       ? { ...config, maxTokens: info.defaultMaxTokens }
       : config
+    if (defaulted.serviceTier !== undefined && info.supportsServiceTier !== true) {
+      throw new LlmError('the selected model does not support service tiers', 'UNSUPPORTED_OPTION')
+    }
     const reasoning = info.reasoning
     const requested = defaulted.reasoningEffort
     let resolvedConfig = defaulted
@@ -1115,7 +1120,9 @@ export class LlmRuntime extends TypertRemoteService {
         }
         if (Object.isFrozen(resolvedOptions)) deepFreeze(projectedOptions)
       }
-      const stream = dispatch(this.forAdapter(projectedOptions, adapter))
+      const dispatchOptions = this.forAdapter(projectedOptions, adapter)
+      if (isAgentLoopRequest(options)) markAgentLoopRequest(dispatchOptions)
+      const stream = dispatch(dispatchOptions)
       iterator = stream[Symbol.asyncIterator]()
     } catch (error: unknown) {
       yield adapterFailureChunk(error, options.signal)

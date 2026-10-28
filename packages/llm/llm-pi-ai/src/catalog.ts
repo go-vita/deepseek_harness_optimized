@@ -82,8 +82,13 @@ const THINKING_LEVEL_GATE: Record<ModelThinkingLevel, true> = {
   max: true,
 }
 
-/** Every pi-ai thinking level a profile may declare, in escalation order. */
-export const THINKING_LEVELS = Object.keys(THINKING_LEVEL_GATE) as readonly ModelThinkingLevel[]
+/** Reasoning levels accepted by Harness, including current OpenAI wire levels. */
+export type PiAiThinkingLevel = ModelThinkingLevel | 'none' | 'ultra'
+
+/** Config vocabulary; off remains available for non-OpenAI and legacy profiles. */
+export const THINKING_LEVELS: readonly PiAiThinkingLevel[] = [
+  'off', 'none', ...Object.keys(THINKING_LEVEL_GATE).filter(level => level !== 'off') as ModelThinkingLevel[], 'ultra',
+]
 
 /** One reasoning-dispatch wire format a profile may name. */
 export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFormat']>
@@ -228,7 +233,7 @@ export function catalogModels(provider: string): Map<string, Model<Api>> {
  * absence; every other declared level must name a wire value. A level absent
  * from the dict is not offered.
  */
-export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>
+export type PiAiReasoningEfforts = Partial<Record<PiAiThinkingLevel, string | null>>
 
 /**
  * Whether one pi-ai compat field is configurable on a profile.
@@ -697,7 +702,7 @@ interface ModelReasoning {
   /** Whether the model reasons at all; `false` makes pi-ai ignore the map. */
   reasoning: boolean
   /** The map dispatch reads; absent only when the installed entry's (or none) applies. */
-  thinkingLevelMap?: ThinkingLevelMap
+  thinkingLevelMap?: ThinkingLevelMap & Partial<Record<'none' | 'ultra', string | null>>
 }
 
 /**
@@ -761,7 +766,7 @@ function resolveModelReasoning(
     invalid(provider, `model "${entry.id}" reasoningEfforts offers no level beyond "off"; declare a thinking`
       + ' level, or set reasoningEfforts to false for a non-reasoning model')
   }
-  const map: ThinkingLevelMap = {}
+  const map: ThinkingLevelMap & Partial<Record<'none' | 'ultra', string | null>> = {}
   for (const level of THINKING_LEVELS) {
     const wire = efforts[level]
     if (wire === undefined) {

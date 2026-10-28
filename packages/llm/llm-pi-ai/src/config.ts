@@ -14,7 +14,7 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 
-import type { CacheRetention, ChatTemplateKwargValue, ModelThinkingLevel, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
+import type { CacheRetention, ChatTemplateKwargValue, Provider, ThinkingBudgets, Transport } from '@earendil-works/pi-ai'
 import z from '@deepseek-ai/schemastery'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type { CredentialRef } from '@deepseek-ai/dsh-credentials'
@@ -39,6 +39,7 @@ import type {
   PiAiModelOverride,
   PiAiModelProfile,
   PiAiReasoningEfforts,
+  PiAiThinkingLevel,
   RouteCatalog,
 } from './catalog.ts'
 import { buildProvider, supportedProtocols } from './provider.ts'
@@ -85,11 +86,22 @@ export type {
   PiAiModelOverride,
   PiAiModelProfile,
   PiAiReasoningEfforts,
+  PiAiThinkingLevel,
   PiAiThinkingFormat,
 } from './catalog.ts'
 
 /** Configuration for one pi-ai provider route; the `providers` dict key IS the route. */
 export interface PiAiProviderProfile {
+  /** Compress large JSON requests when the provider explicitly accepts gzip. */
+  gzipRequests?: boolean
+  /** CLI gateways report cumulative usage, not a single context window. */
+  usageIsCumulative?: boolean
+  /** Attach versioned session metadata for a compatible stateful relay. */
+  relaySessionReuse?: boolean
+  /** Send acknowledged HTTP suffixes only; requires the v2 relay protocol. */
+  relayDeltaRequests?: boolean
+  /** Relative endpoint for this provider’s authenticated weekly quota. */
+  weeklyQuotaPath?: string
   /** Credential reference (environment-variable name) resolved per request through `ctx.credentials`. */
   apiKeyEnv?: string
   /** Name shown by configuration surfaces; defaults to the route key. */
@@ -151,9 +163,11 @@ export interface PiAiProviderProfile {
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
   /** Provider-neutral pi-ai reasoning level. */
-  reasoning?: ModelThinkingLevel
+  reasoning?: PiAiThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
+  /** OpenAI service tier; priority requests Fast mode where the endpoint supports it. */
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority'
   /** Prompt-cache retention preference. */
   cacheRetention?: CacheRetention
   /** Streaming transport preference. */
@@ -328,6 +342,11 @@ const profile = z.object({
   displayName: z.string(),
   api: z.union(supportedProtocols()),
   baseURL: z.string(),
+  weeklyQuotaPath: z.string(),
+  gzipRequests: z.boolean(),
+  usageIsCumulative: z.boolean(),
+  relaySessionReuse: z.boolean(),
+  relayDeltaRequests: z.boolean(),
   models: z.array(modelProfile),
   modelOverrides: z.dict(modelOverride),
   compat: compatProfile,
@@ -337,6 +356,7 @@ const profile = z.object({
   headers: z.dict(z.string()),
   reasoning: z.union(THINKING_LEVELS),
   thinkingBudgets,
+  serviceTier: z.union(['auto', 'default', 'flex', 'priority']),
   cacheRetention: z.union(['none', 'short', 'long']),
   transport: z.union(['sse', 'websocket', 'websocket-cached', 'auto']),
   timeoutMs: z.natural(),

@@ -28,8 +28,9 @@ describe('reasoning schema boundary', () => {
     }], api: 'openai-completions' } }, 'deferred')).toThrow(failure)
   })
 
-  it('rejects a level pi-ai does not know at the write that produced it', () => {
-    expect(configWith({ reasoningEfforts: { ultra: 'x' } })).toThrow(/"off"/)
+  it('accepts current OpenAI levels and rejects unknown levels or invalid values', () => {
+    expect(configWith({ reasoningEfforts: { none: 'none', ultra: 'ultra' } })).not.toThrow()
+    expect(configWith({ reasoningEfforts: { quantum: 'x' } })).toThrow()
     expect(configWith({ reasoningEfforts: { high: 42 } })).toThrow()
   })
 

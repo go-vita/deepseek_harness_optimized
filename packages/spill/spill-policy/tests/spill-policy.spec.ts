@@ -632,3 +632,27 @@ describe('disposal (HMR safety)', () => {
     expect(spill?.saves).toHaveLength(1)
   })
 })
+
+
+describe('explicit per-tool retention', () => {
+  it('bounds read only when configured and retains a complete recovery copy', async () => {
+    const { ctx, spill } = await setup({ maxInlineTokens: 5000, toolInlineTokens: { read: 500 } })
+    const original = 'source line\n'.repeat(4000)
+    ctx.tools.register(textTool('read', original))
+    const result = await executeToolFixture(ctx, exec('read'))
+    expect(textOf(result.content)).toContain('/spill/read.txt')
+    expect(estimateContent(result.content)).toBeLessThanOrEqual(500)
+    expect(spill?.saves[0]?.content).toBe(original)
+  })
+  it('preserves all text if recovery storage fails', async () => {
+    const { ctx, spill } = await setup({ maxInlineTokens: 1000, toolInlineTokens: { read: 500 } })
+    spill!.fail = true
+    const original = 'source line\n'.repeat(4000)
+    ctx.tools.register(textTool('read', original))
+    const result = await executeToolFixture(ctx, exec('read'))
+    expect(textOf(result.content)).toBe(original)
+  })
+  it('rejects invalid per-tool budgets', async () => {
+    await expect(setup({ maxInlineTokens: 1000, toolInlineTokens: { read: -1 } })).rejects.toThrow(/toolInlineTokens/)
+  })
+})

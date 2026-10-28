@@ -696,6 +696,8 @@ describe('per-model reasoning efforts', () => {
     // should not need to know that. Declared `off` with no value stays absent
     // from the map — supported, send nothing.
     expect(model.thinkingLevelMap).toEqual({
+      none: null,
+      ultra: null,
       minimal: null,
       medium: null,
       xhigh: null,

@@ -1119,3 +1119,20 @@ it('resolves the exact pi-ai image budget for screenshot coordinates', () => {
     .toEqual({ width: 100, height: 100, maxBytes: 50_000 })
   expect(() => adapter.imageRequestTarget('missing', 'deepseek-flash', IMAGE_REF)).toThrow('does not own provider')
 })
+
+
+it('sends Fast service tier through the final OpenAI request payload', async () => {
+  const server = await mockServer([{ events: textEvents }])
+  const ctx = await harness(server.url, { serviceTier: 'priority' })
+  await assemble(ctx, { model: 'deepseek-flash', messages: [] })
+  expect(server.requests[0]).toMatchObject({ service_tier: 'priority' })
+})
+
+
+it('uses the current request service tier instead of the provider default', async () => {
+  const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+  const ctx = await harness(server.url, { serviceTier: 'default' })
+  await assemble(ctx, { model: 'deepseek-flash', messages: [], serviceTier: 'priority' })
+  await assemble(ctx, { model: 'deepseek-flash', messages: [], serviceTier: 'default' })
+  expect(server.requests).toMatchObject([{ service_tier: 'priority' }, { service_tier: 'default' }])
+})

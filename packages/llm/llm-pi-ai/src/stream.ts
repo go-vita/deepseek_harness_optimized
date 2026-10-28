@@ -78,6 +78,9 @@ function classifyPiAiError(message: string): string {
  *   to non-retryable `PI_AI_ERROR` failures.
  */
 export function mapStopReason(message: AssistantMessage, contextWindow?: number): FinishReason {
+  if (message.stopReason === 'error' && message.errorMessage?.includes('relay_resync_required')) {
+    return { kind: 'error', failure: { code: 'TRANSPORT', message: message.errorMessage } }
+  }
   const piAiOverflow = isContextOverflow(message, contextWindow)
   const harnessOverflow = message.stopReason === 'error'
     && message.errorMessage !== undefined

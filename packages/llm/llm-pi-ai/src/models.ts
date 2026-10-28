@@ -5,7 +5,6 @@ import type {
   Api,
   CreateModelsOptions,
   Model,
-  ModelThinkingLevel,
   MutableModels,
   Provider,
   ProviderAuth,
@@ -13,6 +12,7 @@ import type {
 } from '@earendil-works/pi-ai'
 import type { LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
 import { THINKING_LEVELS } from './catalog.ts'
+import type { PiAiThinkingLevel } from './catalog.ts'
 
 /** Input accepted by the static, single-protocol providers this package builds. */
 interface StaticProviderOptions {
@@ -57,12 +57,12 @@ export function createProvider(input: StaticProviderOptions): Provider {
  * @param model - model descriptor carrying reasoning support and wire mappings.
  * @returns supported levels in pi-ai's escalation order.
  */
-export function getSupportedThinkingLevels(model: Model<Api>): ModelThinkingLevel[] {
+export function getSupportedThinkingLevels(model: Model<Api>): PiAiThinkingLevel[] {
   if (!model.reasoning) return ['off']
   return THINKING_LEVELS.filter((level) => {
-    const mapped = model.thinkingLevelMap?.[level]
+    const mapped = (model.thinkingLevelMap as Partial<Record<PiAiThinkingLevel, string | null>> | undefined)?.[level]
     if (mapped === null) return false
-    if (level === 'xhigh' || level === 'max') return mapped !== undefined
+    if (level === 'none' || level === 'xhigh' || level === 'max' || level === 'ultra') return mapped !== undefined
     return true
   })
 }

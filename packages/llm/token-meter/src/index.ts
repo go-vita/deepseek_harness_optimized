@@ -73,7 +73,12 @@ function optionalHeaderEquals(
 /** Reject stale or misspelled keys before defaults can hide them. */
 function validateConfigKeys(config: TokenMeterConfig): void {
   for (const key of Object.keys(config)) {
-    throw new Error(`TokenMeterConfig: unknown key "${key}" (no settings are supported)`)
+    if (key !== 'cumulativeUsageProviders') throw new Error(`TokenMeterConfig: unknown key "${key}"`)
+  }
+  const providers = config.cumulativeUsageProviders
+  if (providers !== undefined && (!Array.isArray(providers)
+    || providers.some(provider => typeof provider !== 'string' || provider.trim().length === 0))) {
+    throw new Error('TokenMeterConfig: cumulativeUsageProviders must be an array of nonempty provider names')
   }
 }
 
@@ -85,9 +90,11 @@ declare module '@deepseek-ai/cordis' {
 
 /** Replay owner for one service-wide estimator and isolated per-session folds. */
 export class TokenMeter extends Service {
-  // Schemastery preserves untrusted loader keys on an empty object schema;
-  // the public type excludes settings while validateConfigKeys rejects them.
-  static Config: z<TokenMeterConfig> = z.object({}) as unknown as z<TokenMeterConfig>
+  static Config: z<TokenMeterConfig> = z.object({
+    cumulativeUsageProviders: z.array(z.string()).default([]),
+  })
+
+  private readonly cumulativeUsageProviders: ReadonlySet<string>
 
   static inject = ['sessionProjections']
 
@@ -98,6 +105,7 @@ export class TokenMeter extends Service {
   constructor(ctx: Context, config: TokenMeterConfig = {}) {
     super(ctx, 'tokenMeter')
     validateConfigKeys(config)
+    this.cumulativeUsageProviders = new Set(config.cumulativeUsageProviders ?? [])
   }
 
   protected async [Service.init](): Promise<void> {
@@ -121,6 +129,15 @@ export class TokenMeter extends Service {
    */
   contextPressure(session: Session): Pick<ContextPressureProjection, 'pressureTokens' | 'contextWindow'> {
     const { pressureTokens, contextWindow } = this.contextPressureProjectionHandle.stateOf(session)
+    const provider = session.requestHeader()?.config.provider
+    if (provider !== undefined && this.cumulativeUsageProviders.has(provider)) {
+      // Billing remains available through tokenUsage. Until a trustworthy per-
+      // inference sample is wired through, estimate only the current surface.
+      return {
+        pressureTokens: this.measure(session).totalTokens,
+        ...contextWindow === undefined ? {} : { contextWindow },
+      }
+    }
     return {
       ...pressureTokens === undefined ? {} : { pressureTokens },
       ...contextWindow === undefined ? {} : { contextWindow },
@@ -170,7 +187,8 @@ export class TokenMeter extends Service {
       const usage = anchor.usage
       // Signed heuristic deltas remain conservative only from an anchor
       // that is at least as large as the matching full heuristic price.
-      baseline = usage !== null && usageTokens(usage) >= estimatedAnchorTokens
+      const cumulative = header !== undefined && this.cumulativeUsageProviders.has(header.config.provider)
+      baseline = !cumulative && usage !== null && usageTokens(usage) >= estimatedAnchorTokens
         ? { kind: 'usage', tokens: usageTokens(usage), usage }
         : { kind: 'estimated', tokens: estimatedAnchorTokens }
       surfaceDeltaTokens = surface.surfaceTokens - anchorSurfaceTokens

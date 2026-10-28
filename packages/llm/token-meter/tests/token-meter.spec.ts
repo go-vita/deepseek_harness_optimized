@@ -117,7 +117,7 @@ function expectSurfaceTotal(measurement: TokenMeasurement): void {
 }
 
 describe('TokenMeter configuration and registration', () => {
-  it('exposes an empty public configuration type', () => {
+  it('accepts only supported public configuration', () => {
     expectTypeOf<{}>().toExtend<TokenMeterConfig>()
     expectTypeOf<{ contextWindow: number }>().not.toExtend<TokenMeterConfig>()
   })
@@ -642,5 +642,40 @@ describe('malformed replay and listener lifecycle', () => {
     activeMeter = ctx.tokenMeter
     expect(activeMeter.measure(session).logRevision).toBe(3)
     await secondFiber.dispose()
+  })
+})
+
+
+describe('cumulative billing usage routes', () => {
+  const billed: TokenUsage = { inputTokens: 449288, outputTokens: 3000, cacheReadTokens: 20000 }
+
+  it('uses current surface estimates without modifying recorded billing', () => {
+    const session = Session.create(SessionId('cumulative-usage-estimate'))
+    appendSuccessfulCall(session, header('gateway'), { usage: billed })
+    const estimated = meter({ cumulativeUsageProviders: ['mock'] }).measure(session)
+    expect(estimated.baseline.kind).toBe('estimated')
+    expect(estimated.totalTokens).toBeLessThan(1000)
+    const ordinary = meter().measure(session)
+    expect(ordinary.baseline).toMatchObject({ kind: 'usage', tokens: 472288, usage: billed })
+  })
+
+  it('returns an estimated pressure while the accounting projection retains the bill', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(SessionStore)
+      await ctx.plugin(SessionProjectionRegistry)
+      await ctx.plugin(TokenMeter, { cumulativeUsageProviders: ['mock'] })
+      const session = ctx.sessions.create()
+      appendSuccessfulCall(session, header('gateway'), { usage: billed })
+      expect(ctx.tokenMeter.contextPressure(session).pressureTokens).toBe(ctx.tokenMeter.measure(session).totalTokens)
+      expect(ctx.tokenMeter.contextPressure(session).pressureTokens).toBeLessThan(1000)
+      expect(ctx.sessionProjections.snapshot(session).values.tokenUsage).toMatchObject({
+        uncachedInputTokens: 449288, cacheReadTokens: 20000,
+      })
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('rejects invalid provider exclusions', () => {
+    expect(() => meter({ cumulativeUsageProviders: [''] })).toThrow('nonempty provider names')
   })
 })

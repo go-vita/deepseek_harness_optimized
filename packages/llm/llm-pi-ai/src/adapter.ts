@@ -1,3 +1,4 @@
+import { RelayDeltaRequest } from './relay-delta.ts'
 /**
  * Generic pi-ai-backed implementation of the Harness LLM seam.
  *
@@ -32,7 +33,6 @@ import type {
   CredentialStore,
   Model,
   Models,
-  ModelThinkingLevel,
   MutableModels,
   SimpleStreamOptions,
   ThinkingLevel,
@@ -58,9 +58,13 @@ import type {
 } from '@deepseek-ai/dsh-llm'
 import type { AttachmentStore, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { idleWatchdog, timeoutOf } from '@deepseek-ai/dsh-timeout'
+import { gzipRequestFetch } from './request-compression.ts'
+import { relayContextFor, relayContextWithPayload } from './relay-context.ts'
+import type { RelayContext } from './relay-context.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { requestImageTarget, toPiContext } from './context.ts'
 import { conversationUpdates, createModels, getSupportedThinkingLevels } from './models.ts'
+import type { PiAiThinkingLevel } from './catalog.ts'
 import { toStreamChunks } from './stream.ts'
 
 /**
@@ -106,6 +110,8 @@ export interface PiAiAdapterOptions {
   auth: PiAiAuthInjection
   /** Resolve the optional durable attachment service at request time. */
   resolveAttachments?: () => AttachmentStore | undefined
+  /** Read the durable session surface replacement count before starting a request. */
+  resolveSessionGeneration?: (sessionId: NonNullable<GenerateOptions['sessionId']>) => number | undefined
   /** Bridge one attachment reference into the current model-tool execution world. */
   resolveImageAccess?: (attachments: AttachmentStore, ref: ImageAttachmentRef) => ImageAttachmentAccess | undefined
   /**
@@ -126,12 +132,47 @@ export interface PiAiAuthInjection {
 /** Copy profile stream knobs into pi-ai's common option vocabulary. */
 function profileOptions(
   profile: ResolvedPiAiProviderProfile,
-  reasoning: ModelThinkingLevel | undefined,
+  reasoning: PiAiThinkingLevel | undefined,
   apiKey: string | undefined,
+  serviceTier: ResolvedPiAiProviderProfile['serviceTier'] = profile.serviceTier,
+  relayContext?: RelayContext,
 ): SimpleStreamOptions {
-  const enabledReasoning: ThinkingLevel | undefined = reasoning === 'off' ? undefined : reasoning
+  const delta = profile.relayDeltaRequests === true && relayContext !== undefined
+    ? new RelayDeltaRequest(profile.baseURL ?? profile.provider) : undefined
+  const directEffort = reasoning === 'none' || reasoning === 'ultra' ? reasoning : undefined
+  const enabledReasoning: ThinkingLevel | undefined = reasoning === 'off' || reasoning === 'none' ? undefined
+    : reasoning === 'ultra' ? 'high' : reasoning
   return {
     ...apiKey === undefined ? {} : { apiKey },
+    ...delta !== undefined ? { fetch: delta.wrapFetch(profile.gzipRequests === true ? gzipRequestFetch : fetch) }
+      : profile.gzipRequests === true ? { fetch: gzipRequestFetch } : {},
+    // streamSimple drops provider-specific options; onPayload edits the final
+    // request through pi-ai's supported hook instead of patching its SDK.
+    ...serviceTier === undefined && directEffort === undefined && relayContext === undefined ? {} : {
+      onPayload: (payload: unknown, model: Model<Api>) => {
+        if (model.api !== 'openai-responses' && model.api !== 'openai-completions') {
+          throw new LlmError('serviceTier, direct reasoning levels and relay session metadata require an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
+        }
+        if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new LlmError('the OpenAI request payload must be an object', 'INVALID_CONFIG')
+        }
+        const next: Record<string, unknown> = { ...payload }
+        if (serviceTier !== undefined) next['service_tier'] = serviceTier
+        if (directEffort !== undefined) {
+          if (model.api === 'openai-completions') {
+            if (model.compat === undefined || !('supportsReasoningEffort' in model.compat) || model.compat.supportsReasoningEffort !== false) {
+              next['reasoning_effort'] = directEffort
+            }
+          } else {
+            const existing = next['reasoning']
+            next['reasoning'] = { ...(existing !== null && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}), effort: directEffort }
+          }
+        }
+        if (relayContext === undefined) return next
+        const context = relayContextWithPayload(relayContext, next)
+        return delta === undefined ? { ...next, relay_context: context } : delta.prepare(next, context)
+      },
+    },
     ...enabledReasoning === undefined ? {} : { reasoning: enabledReasoning },
     ...profile.thinkingBudgets === undefined ? {} : { thinkingBudgets: profile.thinkingBudgets },
     ...profile.cacheRetention === undefined ? {} : { cacheRetention: profile.cacheRetention },
@@ -158,22 +199,22 @@ function profileOptions(
  */
 function describableReasoningLevel(
   model: Model<Api>,
-  effort: ReasoningEffortIdType | ModelThinkingLevel | undefined,
-): ModelThinkingLevel | undefined {
+  effort: ReasoningEffortIdType | PiAiThinkingLevel | undefined,
+): PiAiThinkingLevel | undefined {
   if (effort === undefined) return undefined
   return getSupportedThinkingLevels(model).some(level => level === effort)
-    ? effort as ModelThinkingLevel
+    ? effort as PiAiThinkingLevel
     : undefined
 }
 
 /** Validate an explicit Harness/profile effort without invoking pi-ai's clamp. */
 function resolveReasoningLevel(
   model: Model<Api>,
-  effort: ReasoningEffortIdType | ModelThinkingLevel | undefined,
-): ModelThinkingLevel | undefined {
+  effort: ReasoningEffortIdType | PiAiThinkingLevel | undefined,
+): PiAiThinkingLevel | undefined {
   if (effort === undefined) return undefined
   const supported = getSupportedThinkingLevels(model)
-  if (supported.some(level => level === effort)) return effort as ModelThinkingLevel
+  if (supported.some(level => level === effort)) return effort as PiAiThinkingLevel
   throw new LlmError(
     `pi-ai provider "${model.provider}" model "${model.id}" does not support reasoning effort "${effort}"`,
     'UNSUPPORTED_REASONING_EFFORT',
@@ -198,7 +239,7 @@ function resolveReasoningLevel(
  */
 function reasoningInfo(
   model: Model<Api>,
-  defaultLevel: ModelThinkingLevel | undefined,
+  defaultLevel: PiAiThinkingLevel | undefined,
 ): Pick<LlmResolvedModelInfo, 'reasoning'> | Record<string, never> {
   if (!model.reasoning) return {}
   const levels = getSupportedThinkingLevels(model)
@@ -278,6 +319,15 @@ export class PiAiAdapter extends LlmAdapter {
     if (resolved === undefined) {
       throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, 'UNKNOWN_MODEL')
     }
+    if (profile.relayDeltaRequests === true && (profile.relaySessionReuse !== true || resolved.api !== 'openai-responses')) {
+      throw new LlmError('relayDeltaRequests requires relaySessionReuse and an OpenAI Responses route', 'INVALID_CONFIG')
+    }
+    if (profile.relaySessionReuse === true) {
+      if (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions') {
+        throw new LlmError('relaySessionReuse requires an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
+      }
+      return { ...resolved, compat: { ...resolved.compat, supportsMidConvoSystemMessages: true } }
+    }
     return resolved
   }
 
@@ -333,6 +383,8 @@ export class PiAiAdapter extends LlmAdapter {
       provider,
       id: model,
       name: resolvedModel.name,
+      ...resolvedModel.api === 'openai-responses' || resolvedModel.api === 'openai-completions' ? { supportsServiceTier: true } : {},
+      ...profile.serviceTier === undefined ? {} : { defaultServiceTier: profile.serviceTier },
       inputModalities: [...resolvedModel.input],
       context: { contextWindow: resolvedModel.contextWindow },
       ...configuredMaxTokens === undefined ? {} : { defaultMaxTokens: configuredMaxTokens },
@@ -381,6 +433,9 @@ export class PiAiAdapter extends LlmAdapter {
       model,
       options.reasoningEffort ?? profile.reasoning,
     )
+    const relayContext = profile.relaySessionReuse === true
+      ? relayContextFor(options, options.sessionId === undefined ? undefined : this.config.resolveSessionGeneration?.(options.sessionId))
+      : undefined
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
     const consumer = new AbortController()
@@ -414,7 +469,7 @@ export class PiAiAdapter extends LlmAdapter {
           },
         }, onReplayDegrade, updates.systemPromptUpdate === 'in-history')
       const events = snapshot.models.streamSimple(model, context, {
-        ...profileOptions(profile, reasoning, apiKey),
+        ...profileOptions(profile, reasoning, apiKey, options.serviceTier ?? profile.serviceTier, relayContext),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },
@@ -423,7 +478,9 @@ export class PiAiAdapter extends LlmAdapter {
         // Harness-owned and therefore win collisions.
         headers: requestHeaders(profile.headers),
       })
-      const iterator = toStreamChunks(events, model.contextWindow, options.signal, model.id)[Symbol.asyncIterator]()
+      const iterator = toStreamChunks(
+        events, profile.usageIsCumulative ? undefined : model.contextWindow, options.signal, model.id,
+      )[Symbol.asyncIterator]()
       let exhausted = false
       try {
         while (true) {

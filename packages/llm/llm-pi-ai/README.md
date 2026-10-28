@@ -35,6 +35,8 @@ Choose this adapter when the same composition serves several providers, when a r
 
 ### Configure provider routes
 
+Compatible session-aware OpenAI gateways can opt into `relaySessionReuse: true`, which also preserves system instruction changes as appended history instead of rewriting the initial prompt. Requests with a session ID then carry model-hidden `relay_context` metadata with the session/branch, surface generation, purpose, and a deterministic request ID. Retries retain that ID; a new durable message or changed controls creates another. Main agent calls, compaction, titles, and unclassified auxiliary calls use separate purposes. Forks already have distinct session IDs. Other providers and calls without a session identity omit this extension. The gateway must authenticate clients, isolate their mappings, and validate history before appending it.
+
 Each profile may set a `retryPolicy`; omission uses normal mode with five retries. `apiKeyEnv` is a credential reference resolved per request through the harness credential seam, so no secret enters the configuration file; a reference that resolves to nothing fails the request with `MISSING_CREDENTIAL`. Omitting it leaves the route configured-but-keyless, which for an installed catalog route defers to pi-ai's provider-native ambient discovery.
 
 ```yaml
@@ -78,6 +80,7 @@ Each profile may set a `retryPolicy`; omission uses normal mode with five retrie
 | `displayName` | provider name | Label shown by selector surfaces |
 | `api` | catalog protocol | Wire protocol; only needed for routes the catalog does not supply |
 | `baseURL` | catalog endpoint | Endpoint of every model on the route |
+| `gzipRequests` | `false` | Compress large JSON requests; enable only for gateways accepting gzip request bodies |
 | `models` | installed catalog | Replaces the route's catalog wholesale; each entry defaults from the installed model |
 | `modelOverrides` | none | Reshapes individual installed-catalog models without replacing the rest |
 | `compat` | catalog detection | Wire-compatibility switches for unrecognized endpoints |
@@ -100,7 +103,9 @@ A profile's `models` list replaces the route's installed catalog rather than ext
 
 ### Run with reasoning and wire compatibility
 
-`reasoningEfforts` declares a model's selectable thinking levels: each key is a level selectors offer, its value the spelling dispatch sends on the wire, so `max: ultra` renames a level for a gateway with its own vocabulary. Omitting the field keeps the installed catalog entry's capability; `false` declares a non-reasoning model. `compat` switches reshape the request for endpoints pi-ai cannot recognize — which role carries the system prompt, which field caps output, how a thinking level travels — configurable per route and per model. A model neither the entry nor the installed catalog sizes takes the route's `defaultContextWindow` and `defaultMaxTokens` fallbacks.
+For OpenAI Responses and Chat Completions routes, `serviceTier` sends `service_tier` on the final request (`auto`, `default`, `flex`, or `priority`). `priority` requests Fast mode; model and endpoint support determine availability. Omission leaves the endpoint default unchanged.
+
+`reasoningEfforts` declares a model's selectable thinking levels: each key is a level selectors offer, its value the spelling dispatch sends on the wire, including native `ultra: ultra` and `none: none` for OpenAI routes. The settings editor uses identical keys and values for OpenAI; other protocols may use custom spellings. Omitting the field keeps the installed catalog entry's capability; `false` declares a non-reasoning model. `compat` switches reshape the request for endpoints pi-ai cannot recognize — which role carries the system prompt, which field caps output, how a thinking level travels — configurable per route and per model. A model neither the entry nor the installed catalog sizes takes the route's `defaultContextWindow` and `defaultMaxTokens` fallbacks.
 
 Exact-model metadata lists `reasoning.efforts` from least to greatest selectable effort. A configuration function can select from that list before `prepareCall()` validates the concrete effort. The adapter receives only the resolved controls. Selecting `off` does not guarantee disabled reasoning: a protocol that expresses it by omitting the reasoning field leaves the gateway's default in effect. Reasoning tokens at any selected level count toward the request's output cap.
 

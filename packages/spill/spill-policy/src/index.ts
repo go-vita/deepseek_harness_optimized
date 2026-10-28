@@ -26,13 +26,15 @@ export type { SpillPolicyExec } from './types.ts'
 export interface Config {
   /** Maximum estimated tokens in a retained result, including image descriptors and omission notices. Omitted disables retention. */
   maxInlineTokens?: number
+  /** Per-tool caps; an explicit read cap enables recoverable read previews. */
+  toolInlineTokens?: Record<string, number>
 }
 
 /** Cordis plugin identity. */
 export const name = 'spill-policy'
 /** Tools own both model-facing results and PTC dispatch logs. */
 export const inject = ['tools']
-export const Config: z<Config> = z.object({ maxInlineTokens: z.number() })
+export const Config: z<Config> = z.object({ maxInlineTokens: z.number(), toolInlineTokens: z.dict(z.number()) })
 
 /** Narrow the model's ordered content without rewriting unsupported blocks. */
 function retainable(content: readonly ContentBlock[]): content is RetainableBlock[] {
@@ -52,7 +54,10 @@ export function apply(ctx: Context, config: Config): void {
   if (!Number.isSafeInteger(cap) || cap < 0) {
     throw new Error(`spill-policy: maxInlineTokens must be a non-negative integer (got ${cap})`)
   }
-  const maxTokens = cap
+  const defaultBudget: number = cap
+  for (const [tool, limit] of Object.entries(config.toolInlineTokens ?? {})) {
+    if (!Number.isSafeInteger(limit) || limit < 0) throw new Error(`spill-policy: invalid toolInlineTokens budget for ${tool}`)
+  }
 
   /** Price actual request images and their accompanying descriptor text. */
   function pricing(exec: ToolExecution, images: ImageBlock[]): (block: RetainableBlock) => number {
@@ -93,6 +98,7 @@ export function apply(ctx: Context, config: Config): void {
     exec: ToolExecution, content: ContentBlock[], toolName: string, callId: ToolCallId, label: 'result' | 'dispatch',
   ): Promise<ContentBlock[] | undefined> {
     if (!retainable(content)) return undefined
+    const maxTokens = config.toolInlineTokens?.[toolName] ?? defaultBudget
     try {
       const images = content.filter((block): block is ImageBlock => block.type === 'image')
       const price = pricing(exec, images)
@@ -133,7 +139,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
     const decision = await next()
-    if (decision.kind !== 'accept' || Object.hasOwn(decision, 'value') || exec.name === 'read') return decision
+    if (decision.kind !== 'accept' || Object.hasOwn(decision, 'value') || (exec.name === 'read' && config.toolInlineTokens?.['read'] === undefined)) return decision
     const content = decision.content ?? result.content
     const hasImages = content.some(block => block.type === 'image')
     // Text-only PTC bindings retain their asynchronous log-only spill path.

@@ -35,6 +35,8 @@ kind: "package-reference"
 
 ### 配置提供方路由
 
+兼容会话复用的中转供应商可开启 `relaySessionReuse: true`，同时将系统指令变更保留为追加历史，避免重写初始提示。有会话 ID 的请求携带模型不可见的 `relay_context`，包含会话/分支、历史替换代数、调用用途和稳定请求 ID；传输重试复用 ID，新消息或控制参数变更产生新 ID。主调用、压缩、标题及其他辅助调用用途分离，分支使用独立会话 ID。未启用的供应商和无会话 ID 的调用不附带此扩展。中转必须验证身份、隔离映射并校验历史后再追加。
+
 每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode、最多重试五次。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
 ```yaml
@@ -78,6 +80,7 @@ kind: "package-reference"
 | `displayName` | 提供方名 | 选择器界面显示的标签 |
 | `api` | 目录协议 | 协议格式；仅目录不提供的路由需要 |
 | `baseURL` | 目录端点 | 路由上所有模型的端点 |
+| `gzipRequests` | `false` | 压缩较大的 JSON 请求；仅对支持 gzip 请求正文的网关启用 |
 | `models` | 已安装目录 | 整体替换路由目录；每个条目从已安装模型取默认值 |
 | `modelOverrides` | 无 | 重塑个别已安装目录模型，而不替换其余模型 |
 | `compat` | 目录检测 | 无法识别端点的协议兼容开关 |
@@ -100,7 +103,9 @@ profile 的 `models` 列表会替换而非扩展路由的已安装目录；每�
 
 ### 带推理（reasoning）与协议兼容运行
 
-`reasoningEfforts` 声明模型可选择的 thinking 等级：每个键都是选择器提供的等级，其值是分派时在协议中发送的拼写，因此 `max: ultra` 可以为拥有自有词汇的网关重命名等级。省略该字段时保留已安装目录条目的能力；`false` 声明非推理模型。对于 pi-ai 无法识别的端点，`compat` 开关重塑请求——哪个角色携带系统提示词、哪个字段限制输出、thinking 等级如何传递——可逐路由、逐模型配置。条目与已安装目录都没有尺寸的模型，会采用路由的 `defaultContextWindow` 与 `defaultMaxTokens` 回退值。
+OpenAI Responses 和 Chat Completions 路由可配置 `serviceTier`，在最终请求发送 `service_tier`（`auto`、`default`、`flex` 或 `priority`）。`priority` 请求 Fast 模式，实际支持取决于接口和模型；省略则沿用接口默认。
+
+`reasoningEfforts` 声明模型可选择的 thinking 等级：每个键都是选择器提供的等级，其值是分派时在协议中发送的拼写，OpenAI 路由原生支持 `ultra: ultra` 和 `none: none`。设置页面对 OpenAI 使用同名键值，其他协议可使用自定义拼写。省略该字段时保留已安装目录条目的能力；`false` 声明非推理模型。对于 pi-ai 无法识别的端点，`compat` 开关重塑请求——哪个角色携带系统提示词、哪个字段限制输出、thinking 等级如何传递——可逐路由、逐模型配置。条目与已安装目录都没有尺寸的模型，会采用路由的 `defaultContextWindow` 与 `defaultMaxTokens` 回退值。
 
 确切模型元数据将 `reasoning.efforts` 按可选强度从低到高排列。配置函数可从该列表中选择，再由 `prepareCall()` 校验具体强度。适配器只接收解析后的控制项。选择 `off` 不保证禁用推理：以省略推理字段表达该值的协议会沿用网关默认行为。所选等级下产生的推理 token 都计入该请求的输出上限。
 

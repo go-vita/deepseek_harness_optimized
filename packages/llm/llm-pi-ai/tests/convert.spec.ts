@@ -898,6 +898,8 @@ describe('mapStopReason / mapUsage', () => {
   })
 
   it('maps routable HTTP-ish error messages to stable codes', () => {
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'cli_error: context_length_exceeded: codex_input_too_large: Input exceeds character limit' })))
+      .toMatchObject({ kind: 'error', failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 401: bad key' })))
       .toMatchObject({ kind: 'error', failure: { code: 'AUTH' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 429: rate limit' })))
@@ -1019,5 +1021,19 @@ describe('toStreamChunks defensive branches', () => {
       { type: 'done', reason: 'stop', message: assistant() },
     )))
     expect(chunks[0]).toEqual({ type: 'tool-call-delta', index: 0, id: '', argumentsDelta: '{}' })
+  })
+})
+
+
+describe('cumulative CLI usage', () => {
+  it('retains successful output when usage is not a single context size', () => {
+    const message = assistant({ stopReason: 'stop', content: [{ type: 'text', text: 'summary' }] })
+    message.usage.input = 449288
+    expect(mapStopReason(message, 262144)).toMatchObject({ kind: 'error' })
+    expect(mapStopReason(message, undefined)).toEqual({ kind: 'stop' })
+  })
+  it('still detects explicit CLI overflow without a usage threshold', () => {
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'context_length_exceeded: codex_input_too_large' }), undefined))
+      .toMatchObject({ kind: 'error', failure: { code: CONTEXT_WINDOW_EXCEEDED_CODE } })
   })
 })

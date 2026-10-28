@@ -55,6 +55,8 @@
  * @module @deepseek-ai/dsh-llm-pi-ai
  */
 import type {} from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-client-connection'
 
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 
@@ -210,6 +212,39 @@ export function apply(ctx: Context, config: Config): void {
     )
   }
 
+  // Use the authenticated Harness connection channel; provider credentials never reach the browser.
+  ctx.inject(['connection'], (scope) => {
+    scope.effect(() => scope.connection.fetch.register({
+      path: '/api/provider-weekly-quota', methods: ['POST'], requestBody: 'buffered',
+      fetch: async (request) => {
+        const response = (value: unknown) => Response.json(value, { headers: { 'Cache-Control': 'no-store' } })
+        try {
+          const body = await request.text()
+          if (body.length > 4096) return response({ enabled: false })
+          const { provider } = JSON.parse(body) as { provider?: unknown }
+          if (typeof provider !== 'string') return response({ enabled: false })
+          const profile = profiles().get(provider)
+          if (!profile?.weeklyQuotaPath || !profile.baseURL) return response({ enabled: false })
+          const unavailable = { enabled: true, weekly: null, refreshAfterMs: 60000 }
+          try {
+            const base = new URL(profile.baseURL.endsWith('/') ? profile.baseURL : profile.baseURL + '/')
+            const url = new URL(profile.weeklyQuotaPath, base)
+            if (!['http:', 'https:'].includes(base.protocol) || url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) return response(unavailable)
+            const key = await resolveApiKey(provider, profile)
+            if (!key) return response(unavailable)
+            const result = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, redirect: 'error', signal: AbortSignal.timeout(15000) })
+            if (!result.ok) return response(unavailable)
+            const data = await result.json() as { weekly?: { remaining_percent?: unknown; resets_at?: unknown } | null }
+            const percent = data.weekly?.remaining_percent
+            if (typeof percent !== 'number' || !Number.isFinite(percent) || percent < 0 || percent > 100) return response(unavailable)
+            const reset = data.weekly?.resets_at
+            return response({ enabled: true, weekly: { remainingPercent: percent, resetsAt: typeof reset === 'number' && Number.isFinite(reset) ? reset : null }, refreshAfterMs: 60000 })
+          } catch { return response(unavailable) }
+        } catch { return response({ enabled: false }) }
+      },
+    }), 'llm-pi-ai: weekly quota')
+  })
+
   // One store and one ambient context for the whole plugin instance: both read
   // through `ctx` per call, so they stay correct across the collection rebuilds
   // a configuration change causes, and a sign-in survives one.
@@ -219,6 +254,7 @@ export function apply(ctx: Context, config: Config): void {
     resolveApiKey,
     auth,
     resolveAttachments: () => ctx.get('attachments'),
+    resolveSessionGeneration: sessionId => ctx.get('sessions')?.get(sessionId)?.surface.replaceGeneration,
     resolveImageAccess: (attachments, ref) => resolveImageAttachmentAccess(
       attachments,
       hostPath => ctx.get('fs')?.processPathFromHostPath(hostPath),
