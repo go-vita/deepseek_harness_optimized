@@ -158,10 +158,15 @@ export class SessionCommandController {
           ...(request.reasoningEffort === undefined
             ? {}
             : { reasoningEffort: ReasoningEffortId(request.reasoningEffort) }),
+          ...(request.serviceTier === undefined ? {} : { serviceTier: request.serviceTier }),
         }
         await this.ctx.llm.resolveCallConfig(selected)
+        const previous = agent.model.current()
         agent.model.select(selected)
-        void this.ctx.agentDefaultModel.saveSelection(selected).catch((error: unknown) => {
+        const onlyTierChanged = previous !== undefined && previous.provider === selected.provider
+          && previous.model === selected.model && previous.reasoningEffort === selected.reasoningEffort
+          && previous.serviceTier !== selected.serviceTier
+        if (!onlyTierChanged) void this.ctx.agentDefaultModel.saveSelection(selected).catch((error: unknown) => {
           this.ctx.logger.warn(
             `session-controller: model selection changed for the Session but the default was not saved: ${String(error)}`,
           )

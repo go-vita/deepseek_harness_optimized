@@ -27,6 +27,7 @@ import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
+import { WeeklyQuota } from './WeeklyQuota.tsx'
 import { en, ja, es, fr, de, ru, pt, zh, type ModelKey } from './locales.ts'
 import { orderModelProviders } from './provider-order.ts'
 
@@ -94,6 +95,7 @@ function selectionOf(state: ModelDirectoryState, id: string): ModelSelection | u
         provider: group.id,
         model: model.id,
         ...reasoningEffort === undefined ? {} : { reasoningEffort },
+        ...model.supportsServiceTier === true && state.current?.serviceTier !== undefined ? { serviceTier: state.current.serviceTier } : {},
       }
     }
   }
@@ -163,6 +165,13 @@ export function apply(ctx: ClientContext): void {
         },
       },
     }), 'ui-model-selection: /model contribution')
+  })
+
+  ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
+    scope.slots.inject('conversation.composer.dock', () => scope.slots.register({
+      name: 'conversation.composer.dock', id: 'weekly-quota', order: 2, locale: NS,
+      inject: sessionId => ({ directory: scope.modelDirectories.directoryFor(sessionId).store }),
+    }, WeeklyQuota))
   })
 
   // Entry 2: the composer's named model seat over the SAME directory.

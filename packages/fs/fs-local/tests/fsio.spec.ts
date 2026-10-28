@@ -821,6 +821,30 @@ describe('writeFileAtomic — temp-file safety', () => {
     expect((await readdir(dir)).filter(name => name.includes('.tmp'))).toEqual([])
   })
 
+  it.skipIf(process.platform !== 'linux')('publishes on a VirtualBox share without overwriting a racing creator', async () => {
+    const first = join(dir, 'new.txt')
+    const denied = Object.assign(new Error('hard links unsupported'), { code: 'EPERM' })
+    const vbox = { linkFile: async () => { throw denied }, filesystemType: async () => 0x786f4256 }
+    await writeFileAtomic(first, 'created', undefined, undefined, vbox, { displayPath: first })
+    expect(await readFile(first, 'utf8')).toBe('created')
+    const second = join(dir, 'race.txt')
+    await expect(writeFileAtomic(second, 'ours', undefined, undefined, {
+      ...vbox, inspectTemp: async () => { await writeFile(second, 'competitor') },
+    }, { displayPath: second })).rejects.toMatchObject({ code: 'FS_NOT_OBSERVED' })
+    expect(await readFile(second, 'utf8')).toBe('competitor')
+  })
+
+  it('does not bypass permission errors on non-VirtualBox filesystems', async () => {
+    const file = join(dir, 'denied.txt')
+    const denied = Object.assign(new Error('denied'), { code: 'EPERM' })
+    const fallback = vi.fn()
+    await expect(writeFileAtomic(file, 'ours', undefined, undefined, {
+      platform: 'linux', linkFile: async () => { throw denied }, filesystemType: async () => 0x1234,
+      renameNoReplace: fallback,
+    }, { displayPath: file })).rejects.toMatchObject({ code: 'FS_IO_ERROR', cause: denied })
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
   it('maps a non-collision guarded-create publication failure and cleans staging', async () => {
     const file = join(dir, 'a.txt')
     const denied = Object.assign(new Error('link denied'), { code: 'EACCES' })

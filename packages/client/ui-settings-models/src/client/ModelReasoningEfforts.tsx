@@ -11,10 +11,10 @@ import styles from './ModelsSection.module.css'
 /** Declared levels in stored order, each with the value stored for it, whatever a hand edit left there. */
 type Entries = readonly (readonly [string, unknown])[]
 
-/** Levels a model offers when the switch is turned on, where the schema lists them: Off plus the common OpenAI-compatible trio. */
-const INITIAL_LEVELS: readonly string[] = ['off', 'low', 'medium', 'high']
+/** Common initial levels; add only levels supported by the model. */
+const INITIAL_LEVELS: readonly string[] = ['low', 'medium', 'high']
 
-/** The wire value a level sends unless its row says otherwise; `null` is the Off entry that sends nothing. */
+/** The configured value; a null Off entry leaves its wire behavior to the adapter. */
 function defaultValue(level: string): string | null {
   return level === 'off' ? null : level
 }
@@ -90,6 +90,8 @@ interface ModelReasoningEffortsProps {
   model: DeepSeekModelDraft
   /** Levels the adapter's schema accepts as `reasoningEfforts` keys, in escalation order. */
   levels: readonly string[]
+  /** Protocol using standard OpenAI effort names without a wire alias. */
+  api?: string | undefined
   /** One-based row position for accessible names. */
   position: number
   /** Prevent changes while read-only or saving. */
@@ -107,8 +109,22 @@ interface ModelReasoningEffortsProps {
  * @param props - model declaration and row replacement action.
  * @returns the reasoning-level group.
  */
-export function ModelReasoningEfforts({ model, levels, position, disabled, t, onChange }: ModelReasoningEffortsProps): ReactNode {
-  const entries = readEfforts(model)
+export function ModelReasoningEfforts(
+  { model, levels: offeredLevels, api, position, disabled, t, onChange }: ModelReasoningEffortsProps,
+): ReactNode {
+  const direct = api === 'openai-completions' || api === 'openai-responses'
+  const levels = offeredLevels.filter(level => direct ? level !== 'off' : api === undefined || level !== 'none' && level !== 'ultra')
+  const storedEntries = readEfforts(model)?.map(([level, wire]) => {
+    if (!direct) return [level, wire] as const
+    if (level === 'off' && (wire === null || wire === 'none')) return ['none', 'none'] as const
+    return typeof wire === 'string' && levels.includes(wire) ? [wire, wire] as const : [level, wire] as const
+  }).filter(([level], index, entries) => entries.findIndex(([other]) => other === level) === index)
+  // Display known levels in schema order while preserving unknown keys.
+  const entries = storedEntries?.toSorted(([left], [right]) => {
+    const leftRank = levels.indexOf(left)
+    const rightRank = levels.indexOf(right)
+    return (leftRank < 0 ? levels.length : leftRank) - (rightRank < 0 ? levels.length : rightRank)
+  })
   // Only the focused field keeps its own text, so a field cleared while typing
   // stays empty although its level's name is stored. Leaving the field drops
   // it, and deleting a model, resetting the list, or folding these options all
@@ -124,7 +140,7 @@ export function ModelReasoningEfforts({ model, levels, position, disabled, t, on
   const changeLevel = (current: Entries, index: number, from: string, wire: unknown, to: string): void => {
     // Only a custom spelling between two thinking levels carries over; a value
     // still spelled as its old level, or one crossing to or from Off, resets.
-    const carried = typeof wire === 'string' && wire.length > 0 && wire !== from && from !== 'off' && to !== 'off'
+    const carried = !direct && typeof wire === 'string' && wire.length > 0 && wire !== from && from !== 'off' && to !== 'off'
     write(replaceAt(current, index, [to, carried ? wire : defaultValue(to)]))
   }
 
@@ -134,7 +150,13 @@ export function ModelReasoningEfforts({ model, levels, position, disabled, t, on
       ?? levels.find(candidate => !used.includes(candidate))
     /* v8 ignore next -- the add button is disabled once every level has a row */
     if (level === undefined) return
-    write([...current, [level, defaultValue(level)]])
+    const rank = levels.indexOf(level)
+    const before = current.findIndex(([existing]) => {
+      const existingRank = levels.indexOf(existing)
+      return existingRank >= 0 && existingRank > rank
+    })
+    const index = before < 0 ? current.length : before
+    write([...current.slice(0, index), [level, defaultValue(level)], ...current.slice(index)])
   }
 
   const editValue = (current: Entries, index: number, level: string, text: string): void => {
@@ -152,9 +174,9 @@ export function ModelReasoningEfforts({ model, levels, position, disabled, t, on
   // A stored key the offered levels do not name stays selectable in its own row.
   const choicesFor = (level: string): readonly string[] => [
     ...levels.includes(level) ? [] : [level],
-    ...levels.filter(choice => choice === level || !used.includes(choice)),
+    ...levels,
   ]
-  const initialEntries = INITIAL_LEVELS.filter(level => levels.includes(level)).map(level => [level, defaultValue(level)] as const)
+  const initialEntries = (direct ? ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'] : INITIAL_LEVELS).filter(level => levels.includes(level)).map(level => [level, defaultValue(level)] as const)
 
   const refused = entries?.some(([level, wire]) => !acceptedValue(level, wire)) === true
   const missingLevel = entries !== undefined && !used.some(level => level !== 'off')
@@ -201,18 +223,18 @@ export function ModelReasoningEfforts({ model, levels, position, disabled, t, on
                   onChange={(event) => { changeLevel(entries, index, level, wire, event.target.value) }}
                 >
                   {choicesFor(level).map(choice => (
-                    <option key={choice} value={choice}>{choice}</option>
+                    <option key={choice} value={choice} disabled={choice !== level && used.includes(choice)}>{choice}</option>
                   ))}
                 </select>
                 <input
                   className={`${styles['input']} ${styles['modelReasoningValueInput']}`}
                   type="text"
+                  readOnly={direct}
                   value={typing?.level === level ? typing.text : typeof wire === 'string' ? wire : ''}
                   placeholder={level === 'off' ? t('modelReasoningOffValuePlaceholder') : level}
                   aria-label={`${level} ${t('modelReasoningValue')}`}
                   aria-invalid={!acceptedValue(level, wire)}
-                  // Off only turns reasoning off; a value stored in cordis.patch.yml is shown and kept.
-                  disabled={disabled || level === 'off'}
+                  disabled={disabled}
                   onChange={(event) => { editValue(entries, index, level, event.target.value) }}
                   onBlur={() => { leaveValue(entries, index, level, wire) }}
                 />

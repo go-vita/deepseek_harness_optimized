@@ -67,6 +67,19 @@ async function preStep(
 }
 
 describe('Session model selection', () => {
+  it('keeps the service tier in the current session and request header', async () => {
+    const first = await harness()
+    const second = await harness()
+    first.record({ ...INITIAL, serviceTier: 'priority' })
+    expect(first.current()).toEqual({ ...INITIAL, serviceTier: 'priority' })
+    expect(second.current()).toEqual(INITIAL)
+    first.header({ ...INITIAL, serviceTier: 'priority' })
+    expect(first.current()).toEqual({ ...INITIAL, serviceTier: 'priority' })
+    first.record({ ...INITIAL, serviceTier: 'default' })
+    expect(first.current()).toEqual({ ...INITIAL, serviceTier: 'default' })
+    expect(second.current()).toEqual(INITIAL)
+  })
+
   it('uses initial options only until a selection or request is recorded and returns detached values', async () => {
     const h = await harness({})
     expect(h.current()).toBeUndefined()

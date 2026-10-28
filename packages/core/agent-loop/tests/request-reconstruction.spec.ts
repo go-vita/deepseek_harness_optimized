@@ -85,6 +85,23 @@ function registerEcho(ctx: Context) {
 }
 
 describe('request stability across the loop', () => {
+  it('keeps Fast isolated per session in logged request headers and dispatched requests', async () => {
+    const adapter = new MockAdapter([textResponse('first'), textResponse('second')])
+    adapter.supportsServiceTier = true
+    const ctx = await harness(adapter)
+    const first = await ctx.agentLoop.create(SessionId('fast-first'), { provider: 'mock', model: 'mock' })
+    const second = await ctx.agentLoop.create(SessionId('fast-second'), { provider: 'mock', model: 'mock' })
+    first.model.select({ provider: 'mock', model: 'mock', serviceTier: 'priority' })
+    send(first, 'first')
+    await waitForIdle(ctx, first)
+    send(second, 'second')
+    await waitForIdle(ctx, second)
+    expect(adapter.requests[0]?.serviceTier).toBe('priority')
+    expect(adapter.requests[1]?.serviceTier).toBeUndefined()
+    expect(first.session.requestHeader()?.config.serviceTier).toBe('priority')
+    expect(second.session.requestHeader()?.config.serviceTier).toBeUndefined()
+  })
+
   it('each step request within a turn append-extends the previous, frozen end to end', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'echo', { text: 'one' }, 'first'),

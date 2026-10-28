@@ -6,6 +6,7 @@
     providers:
       moonshotai:
         apiKeyEnv: MOONSHOT_API_KEY
+        serviceTier: priority
 
 - insert:
     # Keep pi-ai model preparation; only the recorded response stream is substituted.

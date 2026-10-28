@@ -259,6 +259,10 @@ function assertCurrentLlmShape(event: Record<string, unknown>, index: number): v
       && (typeof reasoningEffort !== 'string' || reasoningEffort.length === 0)) {
       throw new Error(`seed request/header at index ${index} has an invalid reasoningEffort`)
     }
+    const serviceTier = configRecord['serviceTier']
+    if (serviceTier !== undefined && serviceTier !== 'default' && serviceTier !== 'priority') {
+      throw new Error(`seed request/header at index ${index} has an invalid serviceTier`)
+    }
     assertAdapterDefaults(headerRecord['adapterDefaults'], configRecord, index)
     const reason = record?.['reason']
     if (reason !== 'initial' && reason !== 'resume' && reason !== 'change' && reason !== 'series') {

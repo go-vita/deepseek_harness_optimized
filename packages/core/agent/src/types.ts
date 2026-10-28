@@ -83,6 +83,8 @@ export interface ModelSelection {
   model: string
   /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
   reasoningEffort?: ReasoningEffortId
+  /** Explicit service tier for this session. */
+  serviceTier?: 'default' | 'priority'
 }
 
 /** Client view of the durable model-selection fold. */

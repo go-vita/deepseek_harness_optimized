@@ -618,7 +618,7 @@ export class ReactLoopAgent implements Agent {
       // oxlint-disable-next-line typescript/no-non-null-assertion -- the instance logged the header it now folds
       ? requestProposal(session.requestHeader()!)
       : maxTokens === undefined ? {} : { maxTokens }
-    const { provider: _provider, model: _model, reasoningEffort: _effort, ...controls } = persisted
+    const { provider: _provider, model: _model, reasoningEffort: _effort, serviceTier: _tier, ...controls } = persisted
     const seedConfig = deepFreeze(structuredClone({ ...controls, ...selection }))
     const proposedConfig = await this.dispatch.waterfall(
       'agent/request', { turn, step, signal },
@@ -630,6 +630,9 @@ export class ReactLoopAgent implements Agent {
     }
     if (proposedConfig.reasoningEffort !== selection.reasoningEffort) {
       throw new Error(`agent "${this.id}": agent/request proposed reasoning effort "${proposedConfig.reasoningEffort ?? 'adapter default'}" after step preparation fixed "${selection.reasoningEffort ?? 'adapter default'}"; use agent.model.select() before step preparation`)
+    }
+    if (proposedConfig.serviceTier !== selection.serviceTier) {
+      throw new Error('agent/request cannot change the selected service tier')
     }
     let config: LlmCallConfig
     let preparedCall: PreparedLlmCall | undefined

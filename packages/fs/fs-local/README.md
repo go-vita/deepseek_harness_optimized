@@ -84,7 +84,7 @@ The backend builds on three ideas:
 
 ### Write path
 
-Each write probes the target, enforces the optional guard (`createIfAbsent` or `replaceIfVersion`), captures a bounded `before` diff basis when both sides are small enough, stages the new content next to the target, fsyncs, and publishes atomically. Guarded creation uses a hard-link publication that never replaces a concurrent creator, rejecting it with `FS_NOT_OBSERVED` instead.
+Each write probes the target, enforces the optional guard (`createIfAbsent` or `replaceIfVersion`), captures a bounded `before` diff basis when both sides are small enough, stages the new content next to the target, fsyncs, and publishes atomically. Guarded creation uses no-replace publication that never replaces a concurrent creator, rejecting it with `FS_NOT_OBSERVED` instead. On Linux VirtualBox shared folders, which do not support hard links, it uses atomic `renameat2` with `RENAME_NOREPLACE`.
 
 ### Edit path
 

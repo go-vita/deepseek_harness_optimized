@@ -13,18 +13,18 @@ import { en } from '../src/client/locales.ts'
 afterEach(cleanup)
 
 const t = (key: keyof typeof en): string => en[key]
-const DEFAULTS = { off: null, low: 'low', medium: 'medium', high: 'high' }
+const DEFAULTS = { low: 'low', medium: 'medium', high: 'high' }
 /** The levels llm-pi-ai's schema lists today. */
 const LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 /** Render the controlled group over local state, reporting every write. */
-function renderGroup(initial: DeepSeekModelDraft, options: { disabled?: boolean; levels?: readonly string[] } = {}) {
+function renderGroup(initial: DeepSeekModelDraft, options: { disabled?: boolean; levels?: readonly string[]; api?: string } = {}) {
   const writes: DeepSeekModelDraft[] = []
   function Harness() {
     const [model, setModel] = useState(initial)
     return (
       <ModelReasoningEfforts
-        model={model} levels={options.levels ?? LEVELS} position={1} disabled={options.disabled ?? false} t={t}
+        model={model} levels={options.levels ?? LEVELS} api={options.api} position={1} disabled={options.disabled ?? false} t={t}
         onChange={(next) => { writes.push(next); setModel(next) }}
       />
     )
@@ -52,28 +52,29 @@ describe('ModelReasoningEfforts', () => {
     expect(writes).toEqual([])
   })
 
-  it('echoes stored levels in their stored order with their API values', () => {
+  it('shows stored levels in schema order with their API values', () => {
     renderGroup({ id: 'gateway', reasoningEfforts: { off: null, max: 'ultra', high: 'high' } })
     expect(toggle().getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('button', { name: en.modelReasoningHelp })).toBeTruthy()
-    expect(levels()).toEqual(['off', 'max', 'high'])
+    expect(levels()).toEqual(['off', 'high', 'max'])
     expect(value('off').value).toBe('')
     expect(value('off').placeholder).toBe(en.modelReasoningOffValuePlaceholder)
-    expect(value('off').disabled).toBe(true)
+    expect(value('off').disabled).toBe(false)
     expect(value('max').value).toBe('ultra')
     expect(value('high').value).toBe('high')
-    // Each select offers its own level and the levels no other row uses.
-    expect([...select(3).options].map(option => option.value)).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh'])
+    // Used levels remain visible but cannot be selected twice.
+    expect([...select(3).options].map(option => option.value)).toEqual(LEVELS)
+    expect([...select(3).options].filter(option => option.disabled).map(option => option.value)).toEqual(['off', 'high'])
     expect(screen.queryByText(en.modelReasoningValueRequired)).toBeNull()
   })
 
-  it('turns on with off, low, medium, and high while keeping other fields', () => {
+  it('turns on with low, medium, and high while keeping other fields', () => {
     const { writes } = renderGroup({ id: 'chat', contextWindow: 131072, compat: { supportsDeveloperRole: false } })
     fireEvent.click(toggle())
     expect(writes.at(-1)).toEqual({
       id: 'chat', contextWindow: 131072, compat: { supportsDeveloperRole: false }, reasoningEfforts: DEFAULTS,
     })
-    expect(levels()).toEqual(['off', 'low', 'medium', 'high'])
+    expect(levels()).toEqual(['low', 'medium', 'high'])
   })
 
   it('removes the field when switched off and starts from the defaults when switched back on', () => {
@@ -84,14 +85,14 @@ describe('ModelReasoningEfforts', () => {
     expect(writes[1]).toEqual({ id: 'chat', reasoningEfforts: DEFAULTS })
   })
 
-  it('appends the next unused level above the highest row, then the lowest unused one', () => {
+  it('inserts the next unused level in schema order', () => {
     const { efforts } = renderGroup({ id: 'chat', reasoningEfforts: { low: 'low', max: 'max' } })
     fireEvent.click(add())
-    expect(levels()).toEqual(['low', 'max', 'off'])
-    expect(entriesOf(efforts())).toEqual([['low', 'low'], ['max', 'max'], ['off', null]])
+    expect(levels()).toEqual(['off', 'low', 'max'])
+    expect(entriesOf(efforts())).toEqual([['off', null], ['low', 'low'], ['max', 'max']])
     fireEvent.click(add())
-    expect(levels()).toEqual(['low', 'max', 'off', 'minimal'])
-    expect(entriesOf(efforts())).toEqual([['low', 'low'], ['max', 'max'], ['off', null], ['minimal', 'minimal']])
+    expect(levels()).toEqual(['off', 'minimal', 'low', 'max'])
+    expect(entriesOf(efforts())).toEqual([['off', null], ['minimal', 'minimal'], ['low', 'low'], ['max', 'max']])
   })
 
   it('stops adding once every level has a row', () => {
@@ -104,19 +105,22 @@ describe('ModelReasoningEfforts', () => {
   it('changes a level in place, carrying a custom value only between thinking levels', () => {
     const { efforts } = renderGroup({ id: 'chat', reasoningEfforts: { low: 'low', high: 'deep', max: 'max' } })
     fireEvent.change(select(1), { target: { value: 'xhigh' } })
-    expect(levels()).toEqual(['xhigh', 'high', 'max'])
+    expect(levels()).toEqual(['high', 'xhigh', 'max'])
     expect(entriesOf(efforts())).toEqual([['xhigh', 'xhigh'], ['high', 'deep'], ['max', 'max']])
-    fireEvent.change(select(2), { target: { value: 'medium' } })
-    expect(entriesOf(efforts())).toEqual([['xhigh', 'xhigh'], ['medium', 'deep'], ['max', 'max']])
-    fireEvent.change(select(2), { target: { value: 'off' } })
-    expect(entriesOf(efforts())).toEqual([['xhigh', 'xhigh'], ['off', null], ['max', 'max']])
-    fireEvent.change(select(2), { target: { value: 'low' } })
-    expect(entriesOf(efforts())).toEqual([['xhigh', 'xhigh'], ['low', 'low'], ['max', 'max']])
+    fireEvent.change(select(1), { target: { value: 'medium' } })
+    expect(entriesOf(efforts())).toEqual([['medium', 'deep'], ['xhigh', 'xhigh'], ['max', 'max']])
+    fireEvent.change(select(1), { target: { value: 'off' } })
+    expect(entriesOf(efforts())).toEqual([['off', null], ['xhigh', 'xhigh'], ['max', 'max']])
+    fireEvent.change(select(1), { target: { value: 'low' } })
+    expect(entriesOf(efforts())).toEqual([['low', 'low'], ['xhigh', 'xhigh'], ['max', 'max']])
   })
 
   it('edits API values, storing the level name for a cleared field and showing it once the field is left', () => {
     const { efforts } = renderGroup({ id: 'gateway', reasoningEfforts: { off: 'none', high: 'high' } })
     expect(value('off').value).toBe('none')
+    fireEvent.change(value('off'), { target: { value: 'disabled' } })
+    expect(efforts()).toEqual({ off: 'disabled', high: 'high' })
+    fireEvent.change(value('off'), { target: { value: 'none' } })
     fireEvent.change(value('high'), { target: { value: ' deep ' } })
     expect(efforts()).toEqual({ off: 'none', high: 'deep' })
     fireEvent.change(value('high'), { target: { value: '' } })
@@ -176,8 +180,10 @@ describe('ModelReasoningEfforts', () => {
   it('offers the levels it is given, seeding only the defaults the list names', () => {
     const { efforts } = renderGroup({ id: 'gateway' }, { levels: ['off', 'low', 'high', 'ultra'] })
     fireEvent.click(toggle())
-    expect(entriesOf(efforts())).toEqual([['off', null], ['low', 'low'], ['high', 'high']])
-    expect([...select(3).options].map(option => option.value)).toEqual(['high', 'ultra'])
+    expect(entriesOf(efforts())).toEqual([['low', 'low'], ['high', 'high']])
+    expect([...select(2).options].map(option => option.value)).toEqual(['off', 'low', 'high', 'ultra'])
+    fireEvent.click(add())
+    expect(levels()).toEqual(['low', 'high', 'ultra'])
     fireEvent.click(add())
     expect(levels()).toEqual(['off', 'low', 'high', 'ultra'])
     expect(add().disabled).toBe(true)
@@ -185,10 +191,10 @@ describe('ModelReasoningEfforts', () => {
 
   it('keeps a stored key the offered levels do not name', () => {
     const { efforts } = renderGroup({ id: 'gateway', reasoningEfforts: { turbo: 'turbo-x', high: 'high' } })
-    expect(levels()).toEqual(['turbo', 'high'])
-    expect([...select(1).options].map(option => option.value)).toEqual(['turbo', 'off', 'minimal', 'low', 'medium', 'xhigh', 'max'])
+    expect(levels()).toEqual(['high', 'turbo'])
+    expect([...select(2).options].map(option => option.value)).toEqual(['turbo', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
     fireEvent.change(value('high'), { target: { value: 'deep' } })
-    expect(entriesOf(efforts())).toEqual([['turbo', 'turbo-x'], ['high', 'deep']])
+    expect(entriesOf(efforts())).toEqual([['high', 'deep'], ['turbo', 'turbo-x']])
   })
 
   it('disables every control while read-only or saving', () => {
@@ -298,5 +304,30 @@ describe('reasoning levels in the model list', () => {
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 1` }))
     expect(screen.getByRole('group', { name: `${en.modelInputTypes} 1` })).toBeTruthy()
     expect(screen.queryByRole('switch', { name: `${en.modelReasoning} 1` })).toBeNull()
+  })
+})
+
+
+describe('OpenAI reasoning parameters', () => {
+  const official = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
+  const options = { api: 'openai-responses', levels: ['off', ...official] }
+
+  it('offers the six reasoning levels with identical API values and no Off alias', () => {
+    const { efforts } = renderGroup({ id: 'gpt-6.1-sol' }, options)
+    fireEvent.click(toggle())
+    expect(levels()).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    expect(efforts()).toEqual(Object.fromEntries(levels().map(level => [level, level])))
+    expect([...select(1).options].map(option => option.value)).toEqual(official)
+    expect(value('ultra').value).toBe('ultra')
+    expect(value('ultra').readOnly).toBe(true)
+  })
+
+  it('displays old wire aliases under their actual parameter names and saves them consistently', () => {
+    const { efforts, writes } = renderGroup({ id: 'gpt-6.1-sol', reasoningEfforts: { off: null, low: 'low', minimal: 'ultra', max: 'max' } }, options)
+    expect(levels()).toEqual(['none', 'low', 'max', 'ultra'])
+    expect(writes).toEqual([])
+    fireEvent.change(select(2), { target: { value: 'medium' } })
+    expect(efforts()).toEqual({ none: 'none', medium: 'medium', max: 'max', ultra: 'ultra' })
+    expect(value('ultra').value).toBe('ultra')
   })
 })

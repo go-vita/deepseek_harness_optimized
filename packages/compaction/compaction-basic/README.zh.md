@@ -244,6 +244,8 @@ Rules:
 
 ## 已知限制与暂缓事项
 
+中转报告 `codex_input_too_large` 时，超限恢复先摘要较早的平衡片段并保留约一半已计价历史，避免摘要请求本身超过 CLI 字符上限。单条无法拆分的超长消息仍可能需要手动缩减。
+
 <a id="known-limitations-and-deferred-work"></a>
 
 

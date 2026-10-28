@@ -244,6 +244,8 @@ The replayed system prompt, tools, and shadowed-region messages match the conver
 
 ## Known Limitations and Deferred Work
 
+When the relay reports `codex_input_too_large`, overflow recovery summarizes an older balanced portion first and retains roughly half the priced history, so the summary call can fit the CLI input character cap. A single oversized indivisible message can still require manual reduction.
+
 <a id="known-limitations-and-deferred-work"></a>
 
 

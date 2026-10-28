@@ -1843,7 +1843,7 @@ export interface Config extends ProtocolConfig, ModelListingConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:222`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:224`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -1922,6 +1922,8 @@ export interface PiAiProviderProfile {
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
+  /** OpenAI service tier; priority requests Fast mode where the endpoint supports it. */
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority'
   /** Prompt-cache retention preference. */
   cacheRetention?: CacheRetention
   /** Streaming transport preference. */

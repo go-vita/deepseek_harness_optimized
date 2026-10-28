@@ -37,6 +37,8 @@ Mouse selection uses native browser clicks, including their cancellation behavio
 
 ### Model and effort
 
+For a model whose route accepts service tiers, the composer model menu also offers **Fast mode**. It applies only to the current Session: On sends `service_tier: priority`, Off sends `default`. A newly created Session keeps the provider default; an in-flight request keeps the value captured when it started.
+
 The button's model menu shows search only when its full catalog contains more than four models; smaller catalogs support keyboard navigation directly and focus the current model or first enabled row on all devices. The `/model` command always keeps its search field. Both search fields match model names case-insensitively, including nonconsecutive characters in order; leading and trailing spaces are ignored. Within each provider, prefix matches come first, followed by alignment score and then catalog order. Empty groups are hidden. Empty catalogs and queries without matches are announced through a status region. Search keeps focus while arrow keys cycle the highlighted result across provider groups; Enter or Tab selects it. Left and right arrows keep their native caret behavior. Opening highlights the current model or the first available row, and editing the query resets the highlight to the first result. Reopening the model pane clears the query.
 
 Model and reasoning-effort names use weight 400 (regular) in the composer menu, including the selected item. The search field follows the command popup's compact treatment with transparent background and border in both palettes, with no leading icon and a caption-tone placeholder. The clear button appears for a nonempty query and restores the full list with focus in the search field.

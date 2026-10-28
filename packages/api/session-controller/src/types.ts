@@ -89,6 +89,7 @@ export interface ModelSelection {
   readonly provider: string
   readonly model: string
   readonly reasoningEffort?: string
+  readonly serviceTier?: 'default' | 'priority'
 }
 
 /** One adapter-owned reasoning effort for an exact model route. */
@@ -110,6 +111,8 @@ export interface ModelCatalogModel {
   readonly name: string
   readonly description?: string
   readonly reasoning?: ModelReasoning
+  readonly supportsServiceTier?: boolean
+  readonly defaultServiceTier?: 'auto' | 'default' | 'flex' | 'priority'
 }
 
 /** One provider and its successfully loaded model catalog. */

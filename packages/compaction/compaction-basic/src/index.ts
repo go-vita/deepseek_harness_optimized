@@ -225,7 +225,12 @@ export class BasicCompactionEngine extends CompactionEngine {
       const generation = agent.session.surface.replaceGeneration
       let result: CompactionResult | null
       try {
-        result = await this.compactIfNeeded(agent, 'context-overflow', signal)
+        // A CLI request character cap can also reject the summarization call if
+        // the entire history is sent back for compaction. Summarize a balanced
+        // older portion first and retain the recent tail instead.
+        result = failure.message.includes('codex_input_too_large')
+          ? await this.compactIfNeeded(agent, 'context-overflow', signal, true)
+          : await this.compactIfNeeded(agent, 'context-overflow', signal)
       } catch (recoveryError: unknown) {
         const message = recoveryError instanceof Error ? recoveryError.message : String(recoveryError)
         // A model-free prune can land before later summary work fails. That
@@ -293,6 +298,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     agent: Agent,
     trigger: CompactionTrigger,
     signal: AbortSignal,
+    partialForCodexInputLimit = false,
   ): Promise<CompactionResult | null> {
     const header = agent.session.requestHeader()
     if (header === undefined || routedTarget(agent.session) === undefined) return null
@@ -302,7 +308,8 @@ export class BasicCompactionEngine extends CompactionEngine {
       case 'context-overflow': {
         this.ctx.get('toolResultPruner')?.pruneSession(agent.session)
         const measurement = this.ctx.tokenMeter.measure(agent.session)
-        const range = selectCompactableRange(agent.session, measurement, 0)
+        const retain = partialForCodexInputLimit ? Math.floor(measurement.nodes.reduce((total, node) => total + node.tokens, 0) / 2) : 0
+        const range = selectCompactableRange(agent.session, measurement, retain)
         if (range === null) return null
         return this.compactRegion(range.start, range.end, agent, signal)
       }

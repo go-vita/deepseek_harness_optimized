@@ -148,6 +148,7 @@ export function ModelSelect(
         label: effort.name,
       })),
     ], [reasoning, t])
+  const effectiveServiceTier = state.current?.serviceTier ?? currentChoice?.model.defaultServiceTier
   const { pending } = state
   const busy = pending !== null
 
@@ -404,7 +405,12 @@ export function ModelSelect(
       closeAfterSelection()
       return
     }
-    submit(selection)
+    const target = choices.find(choice => choice.selection.provider === selection.provider && choice.selection.model === selection.model)
+    submit({
+      ...selection,
+      ...target?.model.supportsServiceTier === true && state.current?.serviceTier !== undefined
+        ? { serviceTier: state.current.serviceTier } : {},
+    })
   }
 
   const chooseEffort = (effort: string | undefined): void => {
@@ -417,8 +423,14 @@ export function ModelSelect(
       provider: state.current.provider,
       model: state.current.model,
       ...effort === undefined ? {} : { reasoningEffort: effort },
+      ...state.current.serviceTier === undefined ? {} : { serviceTier: state.current.serviceTier },
     }
     submit(selection)
+  }
+
+  const chooseFast = (): void => {
+    if (state.current === null) return
+    submit({ ...state.current, serviceTier: effectiveServiceTier === 'priority' ? 'default' : 'priority' })
   }
 
   const waiting = currentChoice === undefined && state.status === 'loading'
@@ -427,13 +439,15 @@ export function ModelSelect(
     : currentChoice?.model.name
       ?? t('trigger.fallback')
   const triggerLabel = effortLabel === undefined ? modelLabel : `${modelLabel} · ${effortLabel}`
-  const triggerAria = waiting
+  const fastActive = effectiveServiceTier === 'priority'
+  const baseTriggerAria = waiting
     ? t('trigger.loading')
     : currentChoice === undefined
       ? t('trigger.selectAria')
       : effortLabel === undefined
         ? t('trigger.aria', { model: modelLabel })
         : t('trigger.ariaEffort', { model: modelLabel, effort: effortLabel })
+  const triggerAria = fastActive ? `${baseTriggerAria}, ${t('menu.fast')} ${t('fast.on')}` : baseTriggerAria
   const renderModelLabel = (
     provider: ModelLabelOwner['provider'], model: ModelLabelOwner['model'],
     placement: ModelLabelOwner['placement'], selected: boolean,
@@ -487,6 +501,7 @@ export function ModelSelect(
         <span className={css.triggerLabel}>
           {currentChoice === undefined ? modelLabel : renderModelLabel(currentChoice.group.provider, currentChoice.model, 'trigger', true)}
         </span>
+        {fastActive && <span className={css.fastIndicator} aria-hidden="true" data-fast-active>⚡</span>}
         {effortLabel !== undefined && <span className={css.triggerEffort}>{effortLabel}</span>}
         {busy
           ? <StateDot state="ongoing" />
@@ -520,6 +535,20 @@ export function ModelSelect(
                   <span className={css.cellLabel}>{t('menu.effort')}</span>
                   <span className={css.cellValue}>{effortLabel}</span>
                   <IconChevronRightOutlineRegular className={css.cellChevron} />
+                </button>
+              )}
+              {currentChoice?.model.supportsServiceTier === true && state.current !== null && (
+                <button
+                  ref={itemRef()}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={effectiveServiceTier === 'priority'}
+                  className={css.cell}
+                  disabled={busy}
+                  onClick={chooseFast}
+                >
+                  <span className={css.cellLabel}>{t('menu.fast')}</span>
+                  <span className={css.cellValue}>{effectiveServiceTier === 'priority' ? t('fast.on') : t('fast.off')}</span>
                 </button>
               )}
             </>

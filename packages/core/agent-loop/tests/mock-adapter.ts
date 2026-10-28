@@ -73,6 +73,7 @@ export class MockAdapter extends LlmAdapter {
   requests: GenerateOptions[] = []
   /** Declared system prompt update mode of every route this adapter serves. */
   systemPromptUpdate?: SystemPromptUpdate
+  supportsServiceTier?: boolean
   /** Declared tool update mode of every route this adapter serves. */
   toolUpdate?: ToolUpdate
 
@@ -95,6 +96,7 @@ export class MockAdapter extends LlmAdapter {
       ...this.reasoning === undefined ? {} : { reasoning: this.reasoning },
       ...this.defaultMaxTokens === undefined ? {} : { defaultMaxTokens: this.defaultMaxTokens },
       ...this.systemPromptUpdate === undefined ? {} : { systemPromptUpdate: this.systemPromptUpdate },
+      ...this.supportsServiceTier === true ? { supportsServiceTier: true } : {},
       ...this.toolUpdate === undefined ? {} : { toolUpdate: this.toolUpdate },
     })
   }

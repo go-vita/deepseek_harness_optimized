@@ -2082,6 +2082,22 @@ describe('automatic listener and loader composition', () => {
     expect(session.surface.nodes).toContain(retainedSeq)
   })
 
+  it('summarizes only an older balanced portion for the Codex input character cap', async () => {
+    const ctx = createContext(100_000)
+    const compact = new TestCompactionEngine(ctx, { headroomTokens: 0, maxTokens: 8192, thresholdRatio: 1 })
+    const session = conversation(8, 'history '.repeat(10000))
+    const original = [...session.surface.nodes]
+    const decision = await recover(ctx, agent(session, MODEL), overflow('context_length_exceeded: codex_input_too_large'))
+    expect(decision).toBe(true)
+    expect(compact.calls).toHaveLength(1)
+    // Several of the newest complete turns remain available verbatim.
+    expect(original.slice(-4).every(seq => session.surface.nodes.includes(seq))).toBe(true)
+    expect(original.slice(0, 2).some(seq => !session.surface.nodes.includes(seq))).toBe(true)
+    expect(summarizedText(compact.calls[0]!.input).length).toBeLessThan(1_048_576)
+    expect(summarizedText(compact.calls[0]!.input)).toContain('user 1')
+    expect(summarizedText(compact.calls[0]!.input)).not.toContain('user 8')
+  })
+
   it('authorizes overflow retry when pruning alone advances an indivisible surface', async () => {
     const ctx = createContext(10_000)
     void new ToolResultPruner(ctx, {

@@ -10,6 +10,11 @@
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'quota.weekly': '周剩余 {percent}%',
+  'quota.unavailable': '周剩余 —',
+  'menu.fast': '快速模式',
+  'fast.on': '开启',
+  'fast.off': '关闭',
   'provider.account': 'DeepSeek 账号',
   'command.label': '模型',
   'command.description': '选择本会话使用的模型',
@@ -40,6 +45,11 @@ export type ModelKey = keyof typeof zh
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': 'Fast mode',
+  'fast.on': 'On',
+  'fast.off': 'Off',
   'provider.account': 'DeepSeek Account',
   'command.label': 'Model',
   'command.description': 'Select the model for this conversation',
@@ -67,6 +77,11 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': '高速モード',
+  'fast.on': 'オン',
+  'fast.off': 'オフ',
   'provider.account': 'DeepSeek アカウント',
   'command.label': 'モデル',
   'command.description': 'この会話で使用するモデルを選択',
@@ -94,6 +109,11 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': 'Modo rápido',
+  'fast.on': 'Activado',
+  'fast.off': 'Desactivado',
   'provider.account': 'Cuenta DeepSeek',
   'command.label': 'modelo',
   'command.description': 'Selecciona el modelo para esta conversación',
@@ -121,6 +141,11 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': 'Mode rapide',
+  'fast.on': 'Activé',
+  'fast.off': 'Désactivé',
   'provider.account': 'Compte DeepSeek',
   'command.label': 'Modèle',
   'command.description': 'Sélectionnez le modèle pour cette conversation',
@@ -148,6 +173,11 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': 'Schnellmodus',
+  'fast.on': 'Ein',
+  'fast.off': 'Aus',
   'provider.account': 'DeepSeek-Konto',
   'command.label': 'Modell',
   'command.description': 'Wählen Sie das Modell für dieses Gespräch aus',
@@ -175,6 +205,11 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': 'Быстрый режим',
+  'fast.on': 'Вкл.',
+  'fast.off': 'Выкл.',
   'provider.account': 'DeepSeek Аккаунт',
   'command.label': 'Модель',
   'command.description': 'Выберите модель для этого разговора',
@@ -202,6 +237,11 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'quota.weekly': 'Weekly remaining {percent}%',
+  'quota.unavailable': 'Weekly remaining —',
+  'menu.fast': 'Modo rápido',
+  'fast.on': 'Ativado',
+  'fast.off': 'Desativado',
   'provider.account': 'DeepSeek Conta',
   'command.label': 'Modelo',
   'command.description': 'Selecione o modelo para esta conversa',

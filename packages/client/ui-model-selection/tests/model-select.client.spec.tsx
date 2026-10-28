@@ -150,6 +150,30 @@ describe('ModelSelect label slot', () => {
 })
 
 describe('ModelSelect reasoning effort', () => {
+  it('toggles Fast in the model menu and preserves the selected reasoning effort', async () => {
+    const initial = state({
+      current: { provider: 'relay', model: 'm', reasoningEffort: 'high' },
+      groups: [{ id: 'relay', name: 'Relay', models: [{ id: 'm', name: 'Relay model', reasoning, supportsServiceTier: true }] }],
+    })
+    const directory = createSnapshotStore(initial)
+    const select = vi.fn(async (selection: ModelSelection) => {
+      directory.set({ ...initial, current: selection })
+      return { ok: true as const, value: undefined }
+    })
+    render(<ModelSelect renderSlot={renderLabel} locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    const trigger = screen.getByRole('button', { name: '选择模型，当前 Relay model，推理等级 High' })
+    expect(trigger.querySelector('[data-fast-active]')).toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /快速模式/ }))
+    await waitFor(() => { expect(select).toHaveBeenCalledWith({ provider: 'relay', model: 'm', reasoningEffort: 'high', serviceTier: 'priority' }) })
+    expect(trigger.querySelector('[data-fast-active]')?.textContent).toBe('⚡')
+    expect(trigger.getAttribute('aria-label')).toContain('快速模式 开启')
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menuitemcheckbox', { name: /快速模式/ }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: /快速模式/ }))
+    await waitFor(() => { expect(trigger.querySelector('[data-fast-active]')).toBeNull() })
+  })
+
   it('renders effort names without descriptions and submits the effort as part of the session selection', async () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
     const select = vi.fn(async (selection: ModelSelection) => {

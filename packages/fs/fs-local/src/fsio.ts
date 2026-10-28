@@ -7,13 +7,14 @@
 
 import { randomUUID } from 'node:crypto'
 import { createReadStream, realpath as realpathCallback } from 'node:fs'
-import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat } from 'node:fs/promises'
+import { chmod, link, lstat, mkdir, open, readFile, readdir, rename, rm, stat, statfs } from 'node:fs/promises'
 import type { BigIntStats, Dirent, Stats } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { TextDecoder, promisify } from 'node:util'
 import { homedir } from 'node:os'
 import { FsError, FsTargetKey, FsVersion } from '@deepseek-ai/dsh-fs'
 import { copyFileDaclWin32, replaceFileWin32 } from './win32.ts'
+import { renameNoReplaceLinux } from './linux.ts'
 
 const BINARY_SAMPLE_BYTES = 8192
 const realpath = promisify(realpathCallback.native)
@@ -94,6 +95,10 @@ export interface FsIoInternals {
   replaceFile?: (replaced: string, replacement: string) => Promise<void>
   /** Override the hard-link no-replace publication boundary. */
   linkFile?: (existingPath: string, newPath: string) => Promise<void>
+  /** Test hook for detecting a VirtualBox shared filesystem. */
+  filesystemType?: (path: string) => Promise<number>
+  /** Override Linux atomic no-replace publication. */
+  renameNoReplace?: (source: string, destination: string) => Promise<void>
   /** Override target inspection after guarded publication fails. */
   inspectPublicationTarget?: (path: string) => Promise<BigIntStats>
   /** Override staging-directory removal for commit-point failure coverage. */
@@ -595,7 +600,7 @@ async function throwGuardedCreateFailure(
  * inert as a mode on Windows but identifies replacement security semantics.
  * @param signal - cancellation checked before final publication.
  * @param internals - Test hook for pinning temp names and observing the staged file.
- * @param createIfAbsent - when provided, publish with a hard-link no-replace
+ * @param createIfAbsent - when provided, publish with an atomic no-replace
  * primitive; a concurrent creator's file is preserved and this write is
  * rejected with `FS_NOT_OBSERVED` using the supplied display path.
  */
@@ -620,6 +625,8 @@ export async function writeFileAtomic(
   const copyFileDacl = internals.copyFileDacl ?? copyFileDaclWin32
   const replaceFile = internals.replaceFile ?? replaceFileWin32
   const linkFile = internals.linkFile ?? link
+  const filesystemType = internals.filesystemType ?? (async path => (await statfs(path)).type)
+  const renameNoReplace = internals.renameNoReplace ?? renameNoReplaceLinux
   const inspectPublicationTarget = internals.inspectPublicationTarget
     ?? (path => lstat(path, { bigint: true }))
   const removeStagingDir = internals.removeStagingDir
@@ -648,7 +655,22 @@ export async function writeFileAtomic(
       try {
         await linkFile(tempPath, absolutePath)
       } catch (error: unknown) {
-        await throwGuardedCreateFailure(error, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget)
+        // VirtualBox shared folders reject hard links even when writes are allowed.
+        // Only this filesystem gets the Linux atomic RENAME_NOREPLACE fallback;
+        // an ordinary permission error must not be bypassed on other mounts.
+        let vbox = false
+        if (platform === 'linux' && error instanceof Error && 'code' in error
+          && (error.code === 'EPERM' || error.code === 'ENOTSUP' || error.code === 'EOPNOTSUPP')) {
+          try { vbox = await filesystemType(directory) === 0x786f4256 } catch { /* keep original failure */ }
+        }
+        if (!vbox) await throwGuardedCreateFailure(error, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget)
+        try {
+          throwIfAborted(signal, 'write')
+          await renameNoReplace(tempPath, absolutePath)
+        } catch (fallbackError: unknown) {
+          if (fallbackError instanceof FsError && fallbackError.code === 'FS_ABORTED') throw fallbackError
+          await throwGuardedCreateFailure(fallbackError, absolutePath, createIfAbsent.displayPath, inspectPublicationTarget)
+        }
       }
     } else if (platform === 'win32' && mode !== undefined) {
       try {
