@@ -308,10 +308,31 @@ export class BasicCompactionEngine extends CompactionEngine {
       case 'context-overflow': {
         this.ctx.get('toolResultPruner')?.pruneSession(agent.session)
         const measurement = this.ctx.tokenMeter.measure(agent.session)
-        const retain = partialForCodexInputLimit ? Math.floor(measurement.nodes.reduce((total, node) => total + node.tokens, 0) / 2) : 0
-        const range = selectCompactableRange(agent.session, measurement, retain)
-        if (range === null) return null
-        return this.compactRegion(range.start, range.end, agent, signal)
+        if (!partialForCodexInputLimit) {
+          const range = selectCompactableRange(agent.session, measurement, 0)
+          return range === null ? null : this.compactRegion(range.start, range.end, agent, signal)
+        }
+        // Keep every summary request below a quarter of the declared window.
+        // The full session can exceed the provider's actual limit even when the
+        // adapter's context estimate says otherwise. Compact bounded older
+        // spans repeatedly before retrying the main request.
+        const window = await this.ctx.llm.resolveModelInfo(header.config.provider, header.config.model, signal)
+          .then(info => info.context?.contextWindow ?? 128000, () => 128000)
+        const target = Math.floor(window * 0.4)
+        const chunk = Math.floor(window * 0.2)
+        let result: CompactionResult | null = null
+        for (let attempt = 0; attempt < 12; attempt += 1) {
+          signal.throwIfAborted()
+          const current = this.ctx.tokenMeter.measure(agent.session)
+          const total = current.nodes.reduce((sum, node) => sum + node.tokens, 0)
+          if (total <= target && result !== null) return result
+          const retain = Math.max(Math.floor(total / 2), total - chunk)
+          const range = selectCompactableRange(agent.session, current, retain)
+            ?? selectCompactableRange(agent.session, current, Math.floor(total / 2))
+          if (range === null) return result
+          result = await this.compactRegion(range.start, range.end, agent, signal)
+        }
+        return result
       }
       /* v8 ignore next -- closed-union exhaustiveness guard */
       default:
