@@ -319,8 +319,9 @@ export class PiAiAdapter extends LlmAdapter {
     if (resolved === undefined) {
       throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, 'UNKNOWN_MODEL')
     }
-    if (profile.relayDeltaRequests === true && (profile.relaySessionReuse !== true || resolved.api !== 'openai-responses')) {
-      throw new LlmError('relayDeltaRequests requires relaySessionReuse and an OpenAI Responses route', 'INVALID_CONFIG')
+    if (profile.relayDeltaRequests === true && (profile.relaySessionReuse !== true
+      || (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions'))) {
+      throw new LlmError('relayDeltaRequests requires relaySessionReuse and an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
     }
     if (profile.relaySessionReuse === true) {
       if (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions') {
