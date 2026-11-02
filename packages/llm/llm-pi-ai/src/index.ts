@@ -233,6 +233,7 @@ export function apply(ctx: Context, config: Config): void {
             const key = await resolveApiKey(provider, profile)
             if (!key) return response(unavailable)
             const result = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, redirect: 'error', signal: AbortSignal.timeout(15000) })
+            if (result.status === 403) return response({ enabled: false })
             if (!result.ok) return response(unavailable)
             const data = await result.json() as { weekly?: { remaining_percent?: unknown; resets_at?: unknown } | null }
             const percent = data.weekly?.remaining_percent

@@ -39,6 +39,8 @@ Compatible session-aware OpenAI gateways can opt into `relaySessionReuse: true`,
 
 Set `relayDeltaRequests: true` together with `relaySessionReuse: true` to send acknowledged HTTP suffixes on either `openai-responses` or `openai-completions`. The gateway must support relay protocol v2 and return `relay_ack`. Chat checkpoints are accepted only after a successful finish chunk and `[DONE]`; interrupted or failed streams do not advance them. Chat message offsets and normalized gateway item counts are tracked separately because one assistant message can contain multiple tool calls. Retries retain the prepared suffix and checkpoint. Without this option the full HTTP history is sent and a compatible gateway can still extract the native suffix.
 
+When `weeklyQuotaPath` is configured, the authenticated quota proxy hides the footer indicator if the gateway returns HTTP 403 for the current API key. A temporary quota-service failure still shows the unavailable state; permission denial never exposes account quota data.
+
 Each profile may set a `retryPolicy`; omission uses normal mode with five retries. `apiKeyEnv` is a credential reference resolved per request through the harness credential seam, so no secret enters the configuration file; a reference that resolves to nothing fails the request with `MISSING_CREDENTIAL`. Omitting it leaves the route configured-but-keyless, which for an installed catalog route defers to pi-ai's provider-native ambient discovery.
 
 ```yaml

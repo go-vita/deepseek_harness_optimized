@@ -39,6 +39,8 @@ kind: "package-reference"
 
 同时设置 `relayDeltaRequests: true` 和 `relaySessionReuse: true`，可在 `openai-responses` 或 `openai-completions` 路径上只发送已确认历史之后的 HTTP 后缀。中转须支持 relay v2 并返回 `relay_ack`。Chat 仅在成功结束帧和 `[DONE]` 都收到后保存确认点，断流或失败不会推进确认点。一条助手消息可能包含多个工具调用，因此客户端消息偏移和中转规范化历史项数分别保存。重试保留原后缀和确认点；未开启该选项时仍发送完整 HTTP 历史，中转仍可提取原生会话新增内容。
 
+配置 `weeklyQuotaPath` 后，如果中转因当前 API Key 无权限而返回 HTTP 403，已鉴权的额度代理会隐藏底部周额度显示。额度服务暂时故障仍显示不可用状态；权限拒绝不返回账号额度信息。
+
 每个 profile 都可以设置 `retryPolicy`；省略时使用 normal mode、最多重试五次。`apiKeyEnv` 是按请求经 harness 凭据 seam 解析的凭据引用，因此配置文件绝不包含密钥；解析为空的引用会让请求以 `MISSING_CREDENTIAL` 失败。省略它会让路由保持已配置但无密钥（configured-but-keyless）状态，对已安装目录路由而言即交由 pi-ai 提供方原生的环境发现。
 
 ```yaml
