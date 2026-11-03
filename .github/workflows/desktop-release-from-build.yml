@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: '已成功打包的 Actions 记录编号（URL 中 actions/runs/ 后的数字）'
+        description: 'Successful packaging run ID (the number after actions/runs/ in its URL)'
         type: string
         required: true
 

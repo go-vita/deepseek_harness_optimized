@@ -6,13 +6,13 @@ const metadata = { repository: 'example/harness', sha: 'a'.repeat(40), buildUrl:
 const commit = (prefix, message = 'change') => ({ sha: prefix.padEnd(40, '0'), commit: { message } })
 test('older installers do not advertise changes from newer commits', () => {
   const notes = desktopReleaseNotes({ ...metadata, commits: [commit('101e11f8aa')] })
-  assert.match(notes, /中转会话与请求传输/)
-  assert.doesNotMatch(notes, /### 云端桌面打包/)
-  assert.doesNotMatch(notes, /### 周额度可见性/)
+  assert.match(notes, /Relay sessions and request transport/)
+  assert.doesNotMatch(notes, /### Cloud desktop packaging/)
+  assert.doesNotMatch(notes, /### Weekly quota visibility/)
 })
 test('included feature commits produce detailed scope and all commit links', () => {
   const notes = desktopReleaseNotes({ ...metadata, commits: [commit('9f73917ae5'), commit('c933b6acac'), commit('bbbbbbbbbb', 'future feature')] })
-  for (const text of ['Fast', '推理等级', 'VirtualBox', '周额度可见性', 'future feature', metadata.sha]) assert.ok(notes.includes(text))
+  for (const text of ['Fast', 'reasoning-effort', 'VirtualBox', 'Weekly quota visibility', 'future feature', metadata.sha]) assert.ok(notes.includes(text))
 })
 test('rerunning notes preserves manual additions without duplicate managed content', () => {
   const first = desktopReleaseNotes({ ...metadata, commits: [] })
@@ -20,7 +20,7 @@ test('rerunning notes preserves manual additions without duplicate managed conte
   const updated = mergeDesktopReleaseNotes(`Manual preface\n${first}\nManual footer`, second)
   assert.ok(updated.startsWith('Manual preface'))
   assert.ok(updated.endsWith('Manual footer'))
-  assert.equal(updated.split('## 构建来源').length, 2)
+  assert.equal(updated.split('## Build information').length, 2)
   assert.equal(mergeDesktopReleaseNotes(updated, second), updated)
 })
 test('upgrades the original default draft and preserves other unmarked descriptions', () => {
