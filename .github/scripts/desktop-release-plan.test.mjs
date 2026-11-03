@@ -56,3 +56,11 @@ test('automatic publishing can append to the same mutable prerelease but never t
   assert.throws(() => selectDesktopRelease([{ ...release, immutable: true }], run.head_sha, options), /published/)
   assert.throws(() => selectDesktopRelease([{ ...release, target_commitish: 'b'.repeat(40) }], run.head_sha, options), /another source/)
 })
+
+test('groups the prebuilt Web package with Windows and ignores mismatched artifact modes', () => {
+  const web = { ...artifact, id: 14, name: artifact.name.replace('mac-arm64', 'web').replace('-unsigned', '-prebuilt') }
+  const windows = { ...artifact, id: 15, name: artifact.name.replace('mac-arm64', 'win-x64') }
+  const result = planDesktopRelease(run, 8, [web, windows, { ...web, id: 16, name: web.name.replace('-prebuilt', '-unsigned') }])
+  assert.equal(result.artifactIds, '14,15')
+  assert.equal(result.tag, `desktop-commit-${run.head_sha}`)
+})

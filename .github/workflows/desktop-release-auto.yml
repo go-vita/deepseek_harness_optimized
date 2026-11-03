@@ -1,8 +1,8 @@
-name: Publish Desktop Release · Automatic
+name: Publish Harness Release · Automatic
 
 on:
   workflow_run:
-    workflows: ['Package Desktop · GitHub Cloud']
+    workflows: ['Package Desktop · GitHub Cloud', 'Package Harness · GitHub Cloud']
     types: [completed]
     branches: [main]
   workflow_dispatch:

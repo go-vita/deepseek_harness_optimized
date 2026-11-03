@@ -38,3 +38,9 @@ test('adding another platform preserves original build links without repeating r
   const retry = desktopReleaseNotes({ ...metadata, buildUrl: secondUrl, previousBody: second, commits: [] })
   assert.equal(retry, second)
 })
+
+test('includes actionable English Web installation and upgrade instructions', () => {
+  const notes = desktopReleaseNotes({ ...metadata, commits: [] })
+  for (const text of ['Web installation: macOS and Linux', 'Node.js 24.9', 'pnpm 11.28.5', './install.sh', './start.sh',
+    '--port 8080 --no-open', 'Ctrl+C', '~/.dsh', 'node_modules', 'Windows installation']) assert.ok(notes.includes(text))
+})

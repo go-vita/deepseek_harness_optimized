@@ -1,13 +1,13 @@
-name: Package Desktop · GitHub Cloud
+name: Package Harness · GitHub Cloud
 
 on:
   workflow_dispatch:
     inputs:
       target:
-        description: '测试安装包平台；all 会分别运行三个构建任务'
+        description: 'web for macOS/Linux, win-x64 for Windows desktop, or all'
         type: choice
-        options: [mac-arm64, mac-x64, win-x64, all]
-        default: mac-arm64
+        options: [web, win-x64, all]
+        default: web
         required: true
 
 permissions:
@@ -19,12 +19,13 @@ concurrency:
 
 jobs:
   package:
+    if: inputs.target == 'win-x64' || inputs.target == 'all'
     name: Unsigned ${{ matrix.target }}
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        target: ${{ fromJSON(inputs.target == 'all' && '["mac-arm64","mac-x64","win-x64"]' || format('["{0}"]', inputs.target)) }}
+        target: [win-x64]
     runs-on: ${{ matrix.target == 'win-x64' && 'windows-2025' || matrix.target == 'mac-arm64' && 'macos-15' || 'macos-15-intel' }}
     timeout-minutes: 120
     defaults:
@@ -94,3 +95,52 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
           '### Harness desktop test package\n\nTarget: '+process.env.PACKAGE_TARGET+'\n\nVersion: '+process.env.PACKAGE_VERSION+'\n\nCommit: '+process.env.GITHUB_SHA+
           '\n\nDownload the installer from this run’s Artifacts section. This unsigned local build has no automatic or mandatory updates. macOS packages are not notarized. Install and test on the target system before sharing.\n');"
+
+  web:
+    if: inputs.target == 'web' || inputs.target == 'all'
+    name: Prebuilt Web · macOS and Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+      DSH_GATE_CONCURRENCY: '1'
+      NODE_OPTIONS: --max-old-space-size=5120
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v5.0.0
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-web
+          run_install: false
+      - name: Install locked build dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Select traceable test version
+        id: version
+        run: >-
+          node -e "const fs=require('node:fs'); const base=JSON.parse(fs.readFileSync('apps/cli/package.json','utf8')).version;
+          const date=new Date().toISOString().slice(0,10).replaceAll('-','');
+          const suffix=[date,process.env.GITHUB_RUN_NUMBER,process.env.GITHUB_RUN_ATTEMPT].join('.');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'version='+base+(base.includes('-')?'.':'-test.')+suffix+'\n');"
+      - name: Build frontend and backend
+        run: pnpm run build --profile local
+      - name: Package prebuilt Web code and dependency manifests
+        run: pnpm run package:web:portable --build-version ${{ steps.version.outputs.version }}
+      - name: Verify consumer dependency installation and Web startup
+        run: python3 .github/scripts/verify-web-portable.py dist/web-portable/*-web.tar.gz
+      - name: Upload prebuilt Web package
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: harness-web-${{ steps.version.outputs.version }}-prebuilt
+          path: |
+            dist/web-portable/deepseek-harness-*-web.tar.gz
+            dist/web-portable/deepseek-harness-*-web.tar.gz.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Describe Web package
+        run: |
+          printf '### Prebuilt Web package\n\nFor macOS and Linux. Users install Node.js 24.9+, pnpm 11.28.5 and dependencies with ./install.sh, then run ./start.sh. No frontend/backend rebuild is needed. Node.js, installed dependencies, and platform binaries are not bundled.\n' >> "$GITHUB_STEP_SUMMARY"

@@ -1,4 +1,4 @@
-name: Draft Desktop Release · Existing Build
+name: Draft Harness Release · Existing Build
 
 on:
   workflow_dispatch:
@@ -99,7 +99,7 @@ jobs:
                 if (error.status !== 404) throw error;
               }
               ({ data: release } = await github.rest.repos.createRelease({ ...context.repo, tag_name: tag, target_commitish: sha,
-                name: `Harness desktop test build · ${tag}`, body, draft: true, prerelease: true }));
+                name: `Harness test build · ${tag}`, body, draft: true, prerelease: true }));
             }
             core.setOutput('tag', release.tag_name);
             core.setOutput('id', release.id);
@@ -114,7 +114,7 @@ jobs:
           python3 - <<'PY'
           import hashlib, json, os, pathlib, subprocess
           root = pathlib.Path('installers')
-          files = sorted(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in {'.dmg', '.exe'})
+          files = sorted(p for p in root.rglob('*') if p.is_file() and (p.suffix.lower() in {'.dmg', '.exe'} or p.name.endswith(('-web.tar.gz', '-web.tar.gz.sha256'))))
           if not files or len({p.name for p in files}) != len(files):
               raise SystemExit('Missing installers or conflicting asset names')
           endpoint = f"repos/{os.environ['GH_REPO']}/releases/{os.environ['RELEASE_ID']}"
@@ -163,7 +163,7 @@ jobs:
         env:
           RELEASE_URL: ${{ steps.published.outputs.url }}
         run: |
-          printf '### Test release published\n\n[Download installers](%s). Other successful platform builds from the same source commit can append their assets to this prerelease.\n' "$RELEASE_URL" >> "$GITHUB_STEP_SUMMARY"
+          printf '### Test release published\n\n[Download packages](%s). Other successful platform builds from the same source commit can append their assets to this prerelease.\n' "$RELEASE_URL" >> "$GITHUB_STEP_SUMMARY"
       - name: Link release draft for review
         if: inputs.publish_release != true
         env:
