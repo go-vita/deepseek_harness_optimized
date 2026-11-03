@@ -6,13 +6,14 @@
 
 ## 概述
 
-本仓库是由社区维护的 [go-vita/deepseek_harness_optimized](https://github.com/go-vita/deepseek_harness_optimized)，基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，其上游由 [DeepSeek AI](https://deepseek.com) 开发。它保留了上游由 [Cordis](https://github.com/cordiverse/cordis) 驱动的一切皆插件架构，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。本社区优化版侧重中转传输、模型控制和社区构建分发，由社区独立维护。
+本仓库是由社区维护的 [go-vita/deepseek_harness_optimized](https://github.com/go-vita/deepseek_harness_optimized)，基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，其上游由 [DeepSeek AI](https://deepseek.com) 开发。它保留了上游由 [Cordis](https://github.com/cordiverse/cordis) 驱动的一切皆插件架构，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。本社区优化版面向 Harness → 兼容中转 → Codex CLI / Claude CLI 的部署，提供中转传输、模型控制与社区构建，由社区独立维护。
 
 <a id="table-of-contents"></a>
 
 ## 目录
 
 - [背景与能力](#background-and-capabilities)
+- [推荐协议](#recommended-protocols)
 - [开发者预览](#developer-preview)
 - [运行](#run)
 - [社区与支持](#community-and-support)
@@ -26,9 +27,23 @@
 
 ## 背景与能力
 
-CLI 对话中反复发送的历史记录可能让后续请求体变大。本社区优化版为兼容的 Codex 和 Claude/Anthropic 接入提供中转会话复用、已确认的增量请求和 gzip 传输。这些能力需要适配且已更新的中转后端与客户端。请求压缩和历史复用不保证降低模型 token 用量或费用。
+Harness 反复发送的对话历史可能让发往 CLI 中转的请求体变大。本社区优化版为 Harness → 兼容中转 → Codex CLI / Claude CLI 链路提供会话复用、已确认的增量请求和 gzip 传输。这些能力需要适配且已更新的中转后端与客户端。普通 DeepSeek 和 Z.ai API 的行为保持不变。请求压缩和历史复用不保证降低模型 token 用量或费用。
 
 其他改进包括按模型设置推理参数、会话 Fast 模式、在权限允许时显示每周额度，以及压缩恢复。社区构建提供 Windows EXE 安装包和适用于 macOS、Linux 的预构建 Web 包。范围、要求和限制见[社区优化版指南](docs/community-variant.zh.md)。
+
+<a id="recommended-protocols"></a>
+
+## 推荐协议
+
+根据兼容中转后端使用的 CLI，选择 Harness 提供商协议：
+
+| 中转后端 | Harness 协议 | 建议 |
+|---|---|---|
+| Codex CLI | OpenAI Responses (`openai-responses`) | 推荐。 |
+| Codex CLI | Chat Completions (`openai-completions`) | 兼容选项；已更新的客户端与兼容中转仍支持会话复用和增量请求。 |
+| Claude CLI | Anthropic Messages (`anthropic-messages`) | 推荐。 |
+
+Responses 与共享中转的规范输入项和事件生命周期一致，省去 Chat 消息与工具的归一化转换。具体要求和取舍见 [Codex 协议选择](docs/community-variant.zh.md#codex-protocol-choice)与 [Chat Completions 兼容性](docs/community-variant.zh.md#chat-completions-compatibility)。
 
 <a id="developer-preview"></a>
 

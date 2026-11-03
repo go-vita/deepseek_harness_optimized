@@ -20,6 +20,8 @@ description: 社区优化版的范围、中转要求与分发方式。
 
 - [背景与范围](#background-and-scope)
 - [连接行为](#connection-behavior)
+- [Codex 协议选择](#codex-protocol-choice)
+- [Chat Completions 兼容性](#chat-completions-compatibility)
 - [其他社区改进](#other-community-changes)
 - [会话、传输与费用](#sessions-transport-and-cost)
 - [前提与恢复](#requirements-and-recovery)
@@ -39,14 +41,37 @@ description: 社区优化版的范围、中转要求与分发方式。
 
 ## 连接行为
 
-中转功能需要匹配的服务端与客户端。普通 API 端点即使接受相同的 API 格式，也不会因此具备中转会话能力。
+Harness 通过 HTTP 向网关发出请求，再由网关驱动原生 Codex CLI 或 Claude CLI 后端。CLI、其账号鉴权信息及持久化原生会话状态均位于中转主机；远程 Harness 客户端无需在本机安装这两个 CLI。本仓库分发 Harness 客户端改动，不包含独立部署的中转服务。请在 Harness 中配置中转的基础地址与 API Key。中转功能需要匹配的服务端与客户端。普通 API 端点即使接受相同的 API 格式，也不会因此具备中转会话能力。
 
 | 连接方式 | 当前源码行为 | 要求 |
 |---|---|---|
-| 通过 OpenAI Chat Completions 或 Responses 的 Codex 中转 | 复用原生 CLI 状态，并发送带确认的 HTTP 增量请求。 | 匹配的会话感知中转服务端与客户端。 |
+| 通过 OpenAI Responses 的 Codex 中转（推荐） | 复用原生 CLI 状态，通过直接的条目路径发送带确认的 HTTP 增量请求。 | 匹配的会话感知中转服务端与客户端。 |
+| 通过 OpenAI Chat Completions 的 Codex 中转（兼容） | 复用原生 CLI 状态，通过消息到条目的投影发送带确认的 HTTP 增量请求。 | 匹配的会话感知中转服务端与客户端；受支持的 Chat 历史。 |
 | 通过 Anthropic Messages 的 Claude 中转 | 复用原生 CLI 状态，并发送带确认的 HTTP 增量请求。 | 支持 Anthropic 中转的匹配服务端与客户端。 |
 | 直连 Z.ai 或 DeepSeek API | 发送完整的当前上下文；上游缓存遵循模型提供商规则。 | 普通 API 凭据与模型提供商配置。 |
 | 其他普通模型提供商 | 保持原有提供商行为。 | 模型提供商的常规要求。 |
+
+<a id="codex-protocol-choice"></a>
+
+## Codex 协议选择
+
+本项目的 Codex CLI 中转推荐使用 Responses。中转的规范化历史采用 Responses 风格的消息、函数调用与函数结果条目，因此 Responses 走直接路径。Chat Completions 则将 `messages`、`tool_calls` 和工具结果投影为这些条目。Responses 还提供明确的 `response.completed` 和 `response.failed` 流事件；Chat 使用结束块加 `[DONE]`。这项建议针对本网关的实现，并不表示 Chat Completions 已弃用。
+
+当前两种 Codex 路由都支持会话复用、带确认的增量请求、gzip、推理控制，以及模型和端点允许的服务档位。Responses 使用 `reasoning.effort`，Chat 使用 `reasoning_effort`，两者都使用 `service_tier`。选择 Responses 本身不会解决请求过大、流错误或原生状态不明的问题，也不保证降低费用。原生状态不明时仍须停止。
+
+<a id="chat-completions-compatibility"></a>
+
+## Chat Completions 兼容性
+
+Chat Completions 在本中转的转换规则范围内继续受支持。主要兼容要求如下：
+
+- 会话历史须使用现代 `tool_calls` 与具有匹配 `tool_call_id` 的结果；旧式 `function_call` 历史会被拒绝。一条助手消息中的多个函数调用受支持；客户端分别跟踪展开后的规范化条目数量与消息数量。
+- Chat 中转支持文本、用户消息中的内联图片，以及客户端定义的函数工具，不会将任意多模态内容或内置工具透传给 CLI。选择 Responses 也不意味着这些输入不受限制。
+- 流式 Chat 检查点只有在 `finish_reason` 为 `stop` 或 `tool_calls` 的结束块中收到有效 `relay_ack`，随后收到 `[DONE]` 时才会推进。流被中断或缺少 `[DONE]` 时不能推进。
+- 流式用量只有在客户端请求 `stream_options.include_usage` 时才会通过独立块返回。未请求该选项或忽略用量块的客户端可能不显示 token 统计，但中转仍会对已完成的生成记账。Responses 将用量包含在已完成的响应中。
+- 未修改的旧 Chat 客户端如果没有 `relay_context`，会使用无状态请求并发送完整 HTTP 历史。会话复用与增量请求需要更新后的客户端和匹配的服务端；Responses 也有相同的扩展前提。
+
+传输配置由[适配器参考](../packages/llm/llm-pi-ai/README.zh.md)维护。无论选择哪种协议，续接状态不明时都须遵循[恢复要求](#requirements-and-recovery)。
 
 <a id="other-community-changes"></a>
 

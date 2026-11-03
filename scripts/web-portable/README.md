@@ -21,6 +21,8 @@ To choose a port or avoid opening a browser, run `./start.sh --port 8080 --no-op
 
 The startup script checks requirements and never installs dependencies or downloads a runtime. Provider API keys and model settings are configured in Harness after startup. Features requiring additional external applications remain dependent on tools you install yourself.
 
+For a Codex CLI relay, select OpenAI Responses in Harness; Chat Completions is a compatibility option. For a Claude CLI relay, select Anthropic Messages. Both Harness and the relay must support the selected transport. See the [CLI relay protocol guide](https://github.com/go-vita/deepseek_harness_optimized/blob/main/docs/community-variant.md#codex-protocol-choice) before configuring the connection.
+
 <a id="data-and-updates"></a>
 
 ## Data and updates
