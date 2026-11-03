@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for community-variant.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/community-variant.md
+/:
+  en: be3c05f4282fc173
+  zh: e8afaa0428bad958
+/community-variant:
+  en: 295e64c71e2743ae
+  zh: e05da7c448c0bb0e
+/community-variant/summary:
+  en: ef09465d80a3c9e1
+  zh: 2291c4e786aab882
+/community-variant/table-of-contents:
+  en: 675e1f66fee55ea1
+  zh: 17e343437514f610
+/community-variant/background-and-scope:
+  en: 22e4f116e0f91c24
+  zh: 8a1c7c173187fe7a
+/community-variant/connection-behavior:
+  en: 05703d0c28df5674
+  zh: 050bfdda5befc70f
+/community-variant/other-community-changes:
+  en: 3c94e46c108fb7e1
+  zh: eba39eee5a3671aa
+/community-variant/sessions-transport-and-cost:
+  en: ade2e4e52d10289a
+  zh: 1a9346263e0748e9
+/community-variant/requirements-and-recovery:
+  en: b536ae5708b7115a
+  zh: 5ba27bcd17cd7d91
+/community-variant/distribution:
+  en: ffa4468b09eb147c
+  zh: 3534f01fa7795812
