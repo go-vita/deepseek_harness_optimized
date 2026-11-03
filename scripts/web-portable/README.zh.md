@@ -4,6 +4,8 @@
 
 [English](README.md) | 中文
 
+这是来自 [go-vita/deepseek_harness_optimized](https://github.com/go-vita/deepseek_harness_optimized) 的社区构建，保留上游包名。本版本及其更新从[本仓库 Releases](https://github.com/go-vita/deepseek_harness_optimized/releases) 下载；上游 npm 包不包含这些社区改动。
+
 此包包含适用于 macOS 和 Linux（x64 或 ARM64）的预构建 Harness JavaScript 和 Web 资源，不包含 Node.js、Electron 应用、平台可执行文件或已安装的第三方依赖。Windows 用户应使用 Windows 桌面安装包。
 
 <a id="install"></a>

@@ -4,6 +4,8 @@
 
 English | [中文](README.zh.md)
 
+This is a community build from [go-vita/deepseek_harness_optimized](https://github.com/go-vita/deepseek_harness_optimized). It retains the upstream package names. Download this variant and its updates from [this repository’s Releases](https://github.com/go-vita/deepseek_harness_optimized/releases); upstream npm packages do not include these community changes.
+
 This package contains prebuilt Harness JavaScript and Web assets for macOS and Linux (x64 or ARM64). It does not contain Node.js, an Electron app, a platform executable, or installed third-party dependencies. Windows users should use the Windows desktop installer.
 
 <a id="install"></a>
