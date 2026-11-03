@@ -8,14 +8,15 @@ export function createRelayCapabilityResolver() {
     profile: ResolvedPiAiProviderProfile, apiKey: string | undefined, signal?: AbortSignal, api = profile.api,
   ): Promise<boolean> => {
     const baseURL = profile.baseURL
-    if (!baseURL || !apiKey || !['openai-completions', 'openai-responses'].includes(api ?? '')) return false
+    if (!baseURL || !apiKey || !['openai-completions', 'openai-responses', 'anthropic-messages'].includes(api ?? '')) return false
     const previous = cache.get(profile)
     if (previous?.key === apiKey) return previous.pending
     const pending = (async (): Promise<boolean> => {
       const base = new URL(baseURL.endsWith('/') ? baseURL : baseURL + '/')
+      if (api === 'anthropic-messages' && !base.pathname.endsWith('/v1/')) base.pathname += 'v1/'
       const url = new URL('relay-capabilities', base)
       const deadline = AbortSignal.timeout(profile.streamIdleTimeoutMs)
-      const response = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` }, redirect: 'error',
+      const response = await fetch(url, { headers: api === 'anthropic-messages' ? { 'x-api-key': apiKey } : { Authorization: `Bearer ${apiKey}` }, redirect: 'error',
         signal: signal === undefined ? deadline : AbortSignal.any([signal, deadline]) })
       if (response.status === 404 || response.status === 405) return false
       if (!response.ok) throw new LlmError(`Relay capability discovery failed: HTTP ${response.status}`, 'RELAY_CAPABILITIES_UNAVAILABLE')

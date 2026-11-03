@@ -27,10 +27,39 @@ function chatItemCount(messages: Item[]): number {
   }, 0)
 }
 
+/** Count message runs and tool blocks using the Anthropic relay's canonical projection. */
+function anthropicItemCount(messages: Item[]): number {
+  return messages.reduce((total, message) => {
+    const content = message['content']
+    if (!Array.isArray(content) || content.length === 0) return total + 1
+    let count = 0
+    let run = false
+    for (const block of content) {
+      if (block.type === 'text' || block.type === 'image') run = true
+      else if (block.type === 'tool_use' || block.type === 'tool_result') {
+        count += (run ? 1 : 0) + 1
+        run = false
+      }
+    }
+    return total + count + (run ? 1 : 0)
+  }, 0)
+}
+
+/** Cache breakpoints move between turns without changing conversation content. */
+function anthropicPrefix(message: Item): Item {
+  const { cache_control: _cache, ...rest } = message
+  const content = rest['content']
+  return { ...rest, content: typeof content === 'string' ? [{ type: 'text', text: content }]
+    : Array.isArray(content) ? content.map((block) => {
+      const { cache_control: _hint, ...part } = block as Item
+      return Array.isArray(part['content']) ? anthropicPrefix(part) : part
+    }) : content }
+}
+
 /** One provider invocation; response acknowledgement is accepted only after completion. */
 export class RelayDeltaRequest {
   private pending?: { entry: Entry; prefix: string[]; config: string; requestId: string; itemCount: number }
-  constructor(private readonly route: string) {}
+  constructor(private readonly route: string, private readonly protocol: 'openai' | 'anthropic' = 'openai') {}
 
   prepare(payload: Record<string, unknown>, context: RelayContext): Record<string, unknown> {
     const chat = Array.isArray(payload['messages'])
@@ -39,19 +68,19 @@ export class RelayDeltaRequest {
       : Array.isArray(payload['input']) ? (payload['input'] as Item[]).filter(item => item['type'] !== 'reasoning') : undefined
     const full = { ...payload, relay_context: { ...context, version: 2, mode: 'full' } }
     if (input === undefined || context.purpose !== 'main') return full
-    const id = key(context, this.route)
+    const id = key(context, `${this.protocol}:${this.route}`)
     let entry = entries.get(id)
     if (entry === undefined) {
       if (entries.size >= 32) entries.delete(entries.keys().next().value as string)
       entry = { touched: Date.now() }; entries.set(id, entry)
     }
     entry.touched = Date.now()
-    const prefix = input.map(hash)
+    const prefix = input.map(item => hash(this.protocol === 'anthropic' ? anthropicPrefix(item) : item))
     const config = hash({ ...payload, [field]: undefined })
     const checkpoint = entry.last?.id === context.request_id ? entry.last.checkpoint : entry.checkpoint
     entry.last = { id: context.request_id, checkpoint }
     this.pending = { entry, prefix, config, requestId: context.request_id,
-      itemCount: chat ? chatItemCount(input) : input.length }
+      itemCount: this.protocol === 'anthropic' ? anthropicItemCount(input) : chat ? chatItemCount(input) : input.length }
     if (checkpoint === undefined || checkpoint.config !== config || checkpoint.count > input.length
       || !checkpoint.prefix.every((value, index) => prefix[index] === value)) return full
     return { ...payload, [field]: input.slice(checkpoint.count), relay_context: { ...context, version: 2,
@@ -70,9 +99,11 @@ export class RelayDeltaRequest {
     const response = (frame['type'] === 'response.completed' ? frame['response'] : frame) as Record<string, unknown> | undefined
     if (response === undefined) return
     const chat = response?.['object'] === 'chat.completion' || response?.['object'] === 'chat.completion.chunk'
+    const anthropic = this.protocol === 'anthropic' && response?.['type'] === 'message'
     const choices = response?.['choices']
     if (chat ? !Array.isArray(choices) || choices.length !== 1
-      || !['stop', 'tool_calls'].includes(choices[0]?.finish_reason) : response?.['status'] !== 'completed') return
+      || !['stop', 'tool_calls'].includes(choices[0]?.finish_reason)
+      : anthropic ? !['end_turn', 'tool_use', 'stop_sequence'].includes(String(response['stop_reason'])) : response?.['status'] !== 'completed') return
     const ack = response['relay_ack'] as Record<string, unknown> | undefined
     const { entry, prefix, config, requestId, itemCount } = this.pending
     if (ack?.['version'] !== 2 || ack['request_id'] !== requestId || ack['base_count'] !== itemCount
@@ -100,6 +131,7 @@ export class RelayDeltaRequest {
       let buffer = ''
       let overflow = false
       let completedChat: Record<string, unknown> | undefined
+      let anthropicFinished = false
       const decoder = new TextDecoder()
       const transform = new TransformStream<Uint8Array, Uint8Array>({
         transform: (chunk, controller) => {
@@ -115,9 +147,14 @@ export class RelayDeltaRequest {
             } else if (line.startsWith('data: {')) {
               try {
                 const frame: Record<string, unknown> = JSON.parse(line.slice(6))
-                if (frame['object'] === 'chat.completion.chunk' && frame['relay_ack'] !== undefined) completedChat = frame
+                if (this.protocol === 'anthropic' && frame['type'] === 'message_delta') {
+                  const delta = frame['delta'] as Record<string, unknown> | undefined
+                  anthropicFinished = ['end_turn', 'tool_use', 'stop_sequence'].includes(String(delta?.['stop_reason']))
+                } else if (this.protocol === 'anthropic' && frame['type'] === 'message_stop' && anthropicFinished) {
+                  this.accept({ type: 'message', stop_reason: 'end_turn', relay_ack: frame['relay_ack'] })
+                } else if (frame['object'] === 'chat.completion.chunk' && frame['relay_ack'] !== undefined) completedChat = frame
                 else {
-                  if (frame['error'] !== undefined) completedChat = undefined
+                  if (frame['error'] !== undefined) { completedChat = undefined; anthropicFinished = false }
                   this.accept(frame)
                 }
               } catch { /* malformed frames cannot advance a checkpoint */ }

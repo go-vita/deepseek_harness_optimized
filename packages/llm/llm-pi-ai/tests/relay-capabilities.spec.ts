@@ -40,3 +40,14 @@ it('fails before generation on a discovery service error', async () => {
   vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response('', { status: 503 })))
   await expect(createRelayCapabilityResolver()(profile(), 'fixture-key')).rejects.toThrow('HTTP 503')
 })
+
+it.each(['https://example.test/claude', 'https://example.test/claude/v1'])('uses Anthropic authentication and v1 capability path from %s', async (baseURL) => {
+  const fetcher = vi.fn<typeof fetch>(async () => Response.json(capabilities))
+  vi.stubGlobal('fetch', fetcher)
+  const p = resolveProfiles({ relay: { api: 'anthropic-messages', baseURL, models: [{ id: 'claude-test' }] } }).get('relay')!
+  expect(await createRelayCapabilityResolver()(p, 'fixture-key')).toBe(true)
+  expect(String(fetcher.mock.calls[0]?.[0])).toBe('https://example.test/claude/v1/relay-capabilities')
+  const headers = new Headers(fetcher.mock.calls[0]?.[1]?.headers)
+  expect(headers.get('x-api-key')).toBe('fixture-key')
+  expect(headers.has('authorization')).toBe(false)
+})
