@@ -140,9 +140,10 @@ function profileOptions(
   apiKey: string | undefined,
   serviceTier: ResolvedPiAiProviderProfile['serviceTier'] = profile.serviceTier,
   relayContext?: RelayContext,
+  api = profile.api,
 ): SimpleStreamOptions {
   const delta = profile.relayDeltaRequests === true && relayContext !== undefined
-    ? new RelayDeltaRequest(profile.baseURL ?? profile.provider) : undefined
+    ? new RelayDeltaRequest(profile.baseURL ?? profile.provider, api === 'anthropic-messages' ? 'anthropic' : 'openai') : undefined
   const directEffort = reasoning === 'none' || reasoning === 'ultra' ? reasoning : undefined
   const enabledReasoning: ThinkingLevel | undefined = reasoning === 'off' || reasoning === 'none' ? undefined
     : reasoning === 'ultra' ? 'high' : reasoning
@@ -154,11 +155,16 @@ function profileOptions(
     // request through pi-ai's supported hook instead of patching its SDK.
     ...serviceTier === undefined && directEffort === undefined && relayContext === undefined ? {} : {
       onPayload: (payload: unknown, model: Model<Api>) => {
+        if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+          throw new LlmError('the provider request payload must be an object', 'INVALID_CONFIG')
+        }
+        if (model.api === 'anthropic-messages' && relayContext !== undefined && serviceTier === undefined && directEffort === undefined) {
+          const next = { ...payload }
+          const context = relayContextWithPayload(relayContext, next)
+          return delta === undefined ? { ...next, relay_context: context } : delta.prepare(next, context)
+        }
         if (model.api !== 'openai-responses' && model.api !== 'openai-completions') {
           throw new LlmError('serviceTier, direct reasoning levels and relay session metadata require an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
-        }
-        if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
-          throw new LlmError('the OpenAI request payload must be an object', 'INVALID_CONFIG')
         }
         const next: Record<string, unknown> = { ...payload }
         if (serviceTier !== undefined) next['service_tier'] = serviceTier
@@ -326,12 +332,12 @@ export class PiAiAdapter extends LlmAdapter {
       throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, 'UNKNOWN_MODEL')
     }
     if (!this.autoRelayProfiles.has(profile) && profile.relayDeltaRequests === true && (profile.relaySessionReuse !== true
-      || (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions'))) {
-      throw new LlmError('relayDeltaRequests requires relaySessionReuse and an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
+      || !['openai-responses', 'openai-completions', 'anthropic-messages'].includes(resolved.api))) {
+      throw new LlmError('relayDeltaRequests requires relaySessionReuse and a supported relay route', 'INVALID_CONFIG')
     }
     if (profile.relaySessionReuse === true || this.autoRelayProfiles.has(profile)) {
-      if (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions') {
-        throw new LlmError('relaySessionReuse requires an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
+      if (!['openai-responses', 'openai-completions', 'anthropic-messages'].includes(resolved.api)) {
+        throw new LlmError('relaySessionReuse requires a supported relay route', 'INVALID_CONFIG')
       }
       return { ...resolved, compat: { ...resolved.compat, supportsMidConvoSystemMessages: true } }
     }
@@ -513,7 +519,7 @@ export class PiAiAdapter extends LlmAdapter {
           },
         }, onReplayDegrade, updates.systemPromptUpdate === 'in-history')
       const events = snapshot.models.streamSimple(model, context, {
-        ...profileOptions(profile, reasoning, apiKey, options.serviceTier ?? profile.serviceTier, relayContext),
+        ...profileOptions(profile, reasoning, apiKey, options.serviceTier ?? profile.serviceTier, relayContext, model.api),
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },
         ...options.sessionId === undefined ? {} : { sessionId: String(options.sessionId) },

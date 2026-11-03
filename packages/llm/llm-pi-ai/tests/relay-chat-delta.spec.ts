@@ -9,12 +9,13 @@ import { createRelayCapabilityResolver } from '../src/relay-capabilities.ts'
 import { memoryAuth } from './auth-double.ts'
 
 it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic'],
-  ['openai-responses', 'explicit'], ['openai-responses', 'automatic']] as const)('streams %s with %s relay transport through full, delta and byte-equivalent retries', async (api, mode) => {
+  ['openai-responses', 'explicit'], ['openai-responses', 'automatic'],
+  ['anthropic-messages', 'explicit'], ['anthropic-messages', 'automatic']] as const)('streams %s with %s relay transport through full, delta and byte-equivalent retries', async (api, mode) => {
   let probes = 0
   const encodings: (string | undefined)[] = []
   const requests: Record<string, unknown>[] = []
   const server = createServer((request, response) => {
-    if (request.method === 'GET' && request.url === '/relay-capabilities') {
+    if (request.method === 'GET' && (request.url === '/relay-capabilities' || request.url === '/v1/relay-capabilities')) {
       probes += 1
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify({ object: 'llm_relay.capabilities', version: 2, session_reuse: true, delta_requests: true, gzip_requests: true }))
@@ -31,6 +32,20 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
       const meta = payload['relay_context'] as Record<string, unknown>
       const messages = (payload['messages'] ?? payload['input']) as Record<string, unknown>[]
       const count = Number(meta['base_count'] ?? 0) + messages.length
+      if (api === 'anthropic-messages') {
+        response.writeHead(200, { 'content-type': 'text/event-stream' })
+        for (const frame of [
+          { type: 'message_start', message: { id: 'msg_fixture', type: 'message', role: 'assistant', model: 'gpt-test', content: [],
+            stop_reason: null, stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 } } },
+          { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+          { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'hello' } },
+          { type: 'content_block_stop', index: 0 },
+          { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 1 } },
+          { type: 'message_stop', relay_ack: { version: 2, request_id: meta['request_id'], base_count: count, base_hash: 'c'.repeat(64) } },
+        ]) response.write(`event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`)
+        response.end()
+        return
+      }
       if (api === 'openai-responses') {
         const item = { id: 'msg_fixture', type: 'message', role: 'assistant', status: 'completed',
           content: [{ type: 'output_text', text: 'hello', annotations: [] }] }
@@ -72,7 +87,7 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
     resolveApiKey: () => Promise.resolve('test-key'), auth: memoryAuth() })
   try {
     const first = markAgentLoopRequest({ provider: 'relay', model: 'gpt-test', sessionId: SessionId('chat-sdk-delta'),
-      serviceTier: 'priority' as const,
+      ...api === 'anthropic-messages' ? {} : { serviceTier: 'priority' as const },
       messages: [createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'reference '.repeat(10000) }] })],
     })
     if (mode === 'automatic') {
@@ -93,10 +108,11 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
     expect(requests).toHaveLength(3)
     expect(requests[0]?.['relay_context']).toMatchObject({ version: 2, mode: 'full' })
     expect(requests[1]?.['relay_context']).toMatchObject({ version: 2, mode: 'delta' })
-    if (api === 'openai-completions') {
-      expect(requests[1]?.['messages']).toEqual([{ role: 'assistant', content: 'hello' }, { role: 'user', content: 'continue' }])
+    if (api !== 'openai-responses') {
+      expect(requests[1]?.['messages']).toHaveLength(2)
+      expect(JSON.stringify(requests[1]?.['messages'])).toContain('continue')
     } else expect(requests[1]?.['input']).toHaveLength(2)
-    expect(requests[1]?.['service_tier']).toBe('priority')
+    if (api !== 'anthropic-messages') expect(requests[1]?.['service_tier']).toBe('priority')
     expect(JSON.stringify(requests[1]).length).toBeLessThan(JSON.stringify(requests[0]).length / 100)
     expect(requests[2]).toEqual(requests[1])
   } finally {

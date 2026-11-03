@@ -283,3 +283,5 @@ pi-ai 事件变成 harness 的推理、文本、工具调用、用量与 finish 
 - `compat` 开关集合由漂移门禁钉在 pi-ai 的 compat 类型上；上游升级若新增字段、为更多协议赋予 compat 类型或扩大值联合，会在有人分类前让构建失败。
 
 </details>
+
+Anthropic Messages 中转也支持同一套会话元数据和 v2 增量协议。能力探测使用 `x-api-key`，续接请求由中转映射到明确的 Claude CLI 会话；客户端只在成功结束的 `message_delta` 后收到最终 `message_stop` 的确认点才推进检查点。混合文本、图片和工具块使用规范化历史项计数，SDK 随轮次移动的缓存标记不影响前缀校验。官方或普通 Anthropic 接口继续使用原有完整上下文请求；这项能力需要中转与客户端同时更新。
