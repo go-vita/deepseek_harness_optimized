@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { loadDesktopPackageEnvironment, localMacOSPackageEnvironment, validateDesktopPackageEnvironment } from '../scripts/desktop-package-environment.mjs'
+import { loadDesktopPackageEnvironment, localMacOSPackageEnvironment, localUnsignedPackageEnvironment, validateDesktopPackageEnvironment } from '../scripts/desktop-package-environment.mjs'
 import { resolveWindowsPackageSettings } from '../scripts/windows-package-settings.mjs'
 
 const WINDOWS = { platform: 'win32', arch: 'x64' } as const
@@ -387,4 +387,12 @@ it.each(['', '0', '9', 'invalid'])('rejects unsupported workflow ZIP choice %j',
     expect(() => loadDesktopPackageEnvironment('darwin', { PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL: level }, directory))
       .toThrow('workflow ZIP compression must be 3 or 7')
   })
+})
+
+it('accepts explicit local Windows packages without update services and rejects signed local mode', () => {
+  const local = localUnsignedPackageEnvironment({ CSC_KEY_PASSWORD: 'fixture', DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN: 'https://example.test' })
+  expect(local.CSC_KEY_PASSWORD).toBeUndefined()
+  expect(local.DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN).toBeUndefined()
+  expect(() => { validateDesktopPackageEnvironment(local, WINDOWS, { unsigned: true }) }).not.toThrow()
+  expect(() => { validateDesktopPackageEnvironment(local, WINDOWS) }).toThrow('local mode requires --unsigned')
 })

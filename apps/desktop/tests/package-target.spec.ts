@@ -157,3 +157,8 @@ it('allows skipping notarization only for signed macOS packages', () => {
   }
   expect(() => parseDesktopPackageInvocation(['win-x64', '--skip-notarization'], 'win32', 'x64')).toThrow(/requires a signed macOS build/u)
 })
+
+it('requires unsigned mode for explicit local packaging', () => {
+  expect(() => parseDesktopPackageInvocation(['win-x64', '--local'], 'win32', 'x64')).toThrow('--local requires --unsigned')
+  expect(parseDesktopPackageInvocation(['win-x64', '--local', '--unsigned'], 'win32', 'x64')).toMatchObject({ local: true, unsigned: true })
+})

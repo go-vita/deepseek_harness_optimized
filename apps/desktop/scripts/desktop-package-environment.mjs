@@ -35,6 +35,15 @@ export function localMacOSPackageEnvironment(environment = process.env) {
 }
 
 /**
+ * Select unsigned local defaults for either desktop platform without an update service.
+ * @param {NodeJS.ProcessEnv} environment Parent build-tool environment.
+ * @returns {NodeJS.ProcessEnv} Local unsigned environment without release credentials.
+ */
+export function localUnsignedPackageEnvironment(environment = process.env) {
+  return { ...localMacOSPackageEnvironment(environment), DSH_DESKTOP_LOCAL_UNSIGNED: '1' }
+}
+
+/**
  * Read a machine preset when selected, otherwise the target's required dotenv; no ambient release fallback.
  * PACKAGE_MACOS_ZIP_COMPRESSION_LEVEL overrides the Mac file setting with 3 or 7; an empty value is invalid.
  * Any defined Mac ZIP override rejects Windows, including an empty value; nonempty Windows overrides reject macOS.
@@ -156,7 +165,8 @@ export function validateDesktopPackageEnvironment(environment, target, options =
   resolveDesktopTargetBuildPaths(environment, target.platform, target.arch)
   resolveDesktopAppId(environment)
   resolveNpmRegistry(environment)
-  if (target.platform !== 'darwin' || !options.unsigned) resolveDesktopPolicyEnvironment(environment)
+  if (environment.DSH_DESKTOP_LOCAL_UNSIGNED === '1' && !options.unsigned) throw new Error('desktop package: local mode requires --unsigned')
+  if (!(options.unsigned && (target.platform === 'darwin' || environment.DSH_DESKTOP_LOCAL_UNSIGNED === '1'))) resolveDesktopPolicyEnvironment(environment)
   if (target.platform === 'darwin') resolveMacOSPackageSettings(environment)
   else resolveWindowsPackageSettings(environment)
   if (options.unsigned) return

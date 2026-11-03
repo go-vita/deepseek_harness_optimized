@@ -1,0 +1,96 @@
+name: Package Desktop · GitHub Cloud
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '测试安装包平台；all 会分别运行三个构建任务'
+        type: choice
+        options: [mac-arm64, mac-x64, win-x64, all]
+        default: mac-arm64
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-package-cloud-${{ github.ref }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Unsigned ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        target: ${{ fromJSON(inputs.target == 'all' && '["mac-arm64","mac-x64","win-x64"]' || format('["{0}"]', inputs.target)) }}
+    runs-on: ${{ matrix.target == 'win-x64' && 'windows-2025' || matrix.target == 'mac-arm64' && 'macos-15' || 'macos-15-intel' }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: ${{ matrix.target == 'win-x64' && 'pwsh' || 'bash' }}
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+      DSH_GATE_CONCURRENCY: '1'
+      DSH_OXLINT_THREADS: '1'
+      NODE_OPTIONS: --max-old-space-size=5120
+    steps:
+      - name: Enable Windows symbolic links
+        if: matrix.target == 'win-x64'
+        run: |
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock" /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git config --global core.symlinks true
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v5.0.0
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm-cloud
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Select traceable test version
+        id: version
+        run: >-
+          node -e "const fs=require('node:fs'); const base=JSON.parse(fs.readFileSync('apps/desktop/package.json','utf8')).version;
+          const date=new Date().toISOString().slice(0,10).replaceAll('-','');
+          const suffix=[date,process.env.GITHUB_RUN_NUMBER,process.env.GITHUB_RUN_ATTEMPT].join('.');
+          const version=base+(base.includes('-')?'.':'-test.')+suffix;
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'version='+version+'\n');"
+      - name: Check local unsigned configuration and tools
+        run: pnpm --dir apps/desktop run package ${{ matrix.target }} --unsigned --local --check --build-version ${{ steps.version.outputs.version }}
+      - name: Build and verify local unsigned package
+        run: pnpm --dir apps/desktop run package ${{ matrix.target }} --unsigned --local --build-version ${{ steps.version.outputs.version }}
+      - name: Upload test installer
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: harness-${{ matrix.target }}-${{ steps.version.outputs.version }}-unsigned
+          path: |
+            apps/desktop/.desktop-build/targets/${{ matrix.target }}/unsigned-artifacts/*.dmg
+            apps/desktop/.desktop-build/targets/${{ matrix.target }}/unsigned-artifacts/*.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Upload packaging diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: harness-${{ matrix.target }}-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: apps/desktop/.desktop-build/packaging-runs/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Describe test package
+        env:
+          PACKAGE_TARGET: ${{ matrix.target }}
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: >-
+          node -e "const fs=require('node:fs');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+          '### Harness desktop test package\n\nTarget: '+process.env.PACKAGE_TARGET+'\n\nVersion: '+process.env.PACKAGE_VERSION+'\n\nCommit: '+process.env.GITHUB_SHA+
+          '\n\nDownload the installer from this run’s Artifacts section. This unsigned local build has no automatic or mandatory updates. macOS packages are not notarized. Install and test on the target system before sharing.\n');"

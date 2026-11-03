@@ -125,3 +125,14 @@ describe('installer preparation preserves application dependencies', () => {
     for (const name of referenced) expect(packaged.has(`lib/${name}`)).toBe(true)
   })
 })
+
+it.each(['win32', 'darwin'] as const)('omits update services from explicit local unsigned %s packages', async (platform) => {
+  const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+  const { localUnsignedPackageEnvironment } = await import('../scripts/desktop-package-environment.mjs')
+  const local = localUnsignedPackageEnvironment({})
+  const config = createElectronBuilderConfig(local, platform, 'x64')
+  expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+  expect(config.publish).toBeNull()
+  expect(config.artifactName).toContain('-unsigned')
+  expect(() => createElectronBuilderConfig({ ...local, DSH_DESKTOP_UNSIGNED: '0' }, platform, 'x64')).toThrow('local mode requires --unsigned')
+})
