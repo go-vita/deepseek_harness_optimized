@@ -1,0 +1,119 @@
+name: Draft Desktop Release · Existing Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: '已成功打包的 Actions 记录编号（URL 中 actions/runs/ 后的数字）'
+        type: string
+        required: true
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: desktop-release-from-build-${{ inputs.build_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Select completed build and current attempt installers
+        id: plan
+        uses: actions/github-script@v8
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            if (!/^[1-9][0-9]*$/.test(process.env.BUILD_RUN_ID)) throw new Error('Enter the numeric Actions run ID');
+            const run_id = Number(process.env.BUILD_RUN_ID);
+            if (!Number.isSafeInteger(run_id)) throw new Error('Invalid Actions run ID');
+            const { data: run } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id });
+            const { data: workflow } = await github.rest.actions.getWorkflow({ ...context.repo, workflow_id: 'desktop-package-cloud.yml' });
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { ...context.repo, run_id, per_page: 100 });
+            const { planDesktopRelease } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/desktop-release-plan.mjs`).href);
+            const plan = planDesktopRelease(run, workflow.id, artifacts);
+            core.setOutput('tag', plan.tag);
+            core.setOutput('sha', plan.sha);
+            core.setOutput('artifact_ids', plan.artifactIds);
+            core.setOutput('run_url', run.html_url);
+            core.info(`Selected ${plan.artifacts.join(', ')} from ${plan.sha}`);
+      - name: Download existing installers inside GitHub
+        uses: actions/download-artifact@v7
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+          artifact-ids: ${{ steps.plan.outputs.artifact_ids }}
+          path: installers
+          merge-multiple: false
+      - name: Create or resume release draft
+        id: release
+        uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+          SOURCE_SHA: ${{ steps.plan.outputs.sha }}
+          BUILD_URL: ${{ steps.plan.outputs.run_url }}
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const sha = process.env.SOURCE_SHA;
+            const releases = await github.paginate(github.rest.repos.listReleases, { ...context.repo, per_page: 100 });
+            let release = releases.find(item => item.tag_name === tag);
+            if (release) {
+              if (!release.draft || release.target_commitish !== sha) throw new Error('Refusing to modify a published release or a draft for another source commit');
+            } else {
+              try {
+                await github.rest.git.getRef({ ...context.repo, ref: `tags/${tag}` });
+                throw new Error('Release tag already exists without a matching draft; choose another build');
+              } catch (error) {
+                if (error.status !== 404) throw error;
+              }
+              const body = `Unsigned desktop test packages.\n\nBuild: ${process.env.BUILD_URL}\n\nSource commit: ${sha}\n\nThese packages have no automatic or mandatory updates. macOS packages are not notarized. Windows packages are not code-signed. Test installation and startup on each target platform before publishing.\n\nDownload the .dmg for your Mac architecture or the .exe for Windows x64. The Source code archives are not installers.`;
+              ({ data: release } = await github.rest.repos.createRelease({ ...context.repo, tag_name: tag, target_commitish: sha,
+                name: `Harness desktop test build · ${tag}`, body, draft: true, prerelease: true }));
+            }
+            core.setOutput('id', release.id);
+            core.setOutput('url', release.html_url);
+      - name: Upload installers and verify duplicate assets
+        env:
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          root = pathlib.Path('installers')
+          files = sorted(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in {'.dmg', '.exe'})
+          if not files or len({p.name for p in files}) != len(files):
+              raise SystemExit('Missing installers or conflicting asset names')
+          endpoint = f"repos/{os.environ['GH_REPO']}/releases/{os.environ['RELEASE_ID']}"
+          release = json.loads(subprocess.check_output(['gh', 'api', endpoint]))
+          if not release['draft']:
+              raise SystemExit('Release was published during upload; refusing to modify it')
+          existing = {a['name']: a for a in json.loads(subprocess.check_output(['gh', 'api', endpoint + '/assets?per_page=100']))}
+          for path in files:
+              if not path.name.startswith('deepseek-harness-') or path.is_symlink():
+                  raise SystemExit(f'Unexpected installer: {path.name}')
+              digest = hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
+              previous = existing.get(path.name)
+              if previous:
+                  if previous.get('digest') != 'sha256:' + digest or previous['size'] != path.stat().st_size:
+                      raise SystemExit(f'Existing asset differs: {path.name}; refusing to overwrite')
+                  print(f'Already uploaded and verified: {path.name}')
+                  continue
+              subprocess.run(['gh', 'release', 'upload', os.environ['RELEASE_TAG'], str(path)], check=True)
+          PY
+      - name: Link release draft for review
+        env:
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+        run: |
+          printf '### Release draft ready\n\n[Open draft](%s), review the installers and notes, then click **Publish release**. This workflow does not publish the release.\n' "$RELEASE_URL" >> "$GITHUB_STEP_SUMMARY"
