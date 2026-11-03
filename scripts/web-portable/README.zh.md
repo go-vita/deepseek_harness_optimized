@@ -21,6 +21,8 @@
 
 启动脚本只检查运行要求，不会安装依赖或下载运行时。启动后在 Harness 中配置供应商 API Key 和模型。需要其他外部应用的功能，仍依赖用户自行安装相应工具。
 
+Codex CLI 中转在 Harness 中推荐选择 OpenAI Responses，Chat Completions 用于兼容；Claude CLI 中转选择 Anthropic Messages。Harness 与中转须同时支持所选传输方式。配置连接前请阅读 [CLI 中转协议指南（英文，可切换中文）](https://github.com/go-vita/deepseek_harness_optimized/blob/main/docs/community-variant.md#codex-protocol-choice)。
+
 <a id="data-and-updates"></a>
 
 ## 数据与升级

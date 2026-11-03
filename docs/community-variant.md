@@ -20,6 +20,8 @@ This community variant adds relay session reuse and acknowledged HTTP deltas to 
 
 - [Background and scope](#background-and-scope)
 - [Connection behavior](#connection-behavior)
+- [Codex protocol choice](#codex-protocol-choice)
+- [Chat Completions compatibility](#chat-completions-compatibility)
 - [Other community changes](#other-community-changes)
 - [Sessions, transport, and cost](#sessions-transport-and-cost)
 - [Requirements and recovery](#requirements-and-recovery)
@@ -39,14 +41,37 @@ This page describes the community variant's connection choices and distribution 
 
 ## Connection behavior
 
-Relay features require a matching backend and client. An ordinary API endpoint does not become a session-aware relay merely because it accepts the same API format.
+Harness sends HTTP requests to the gateway, which drives a native Codex CLI or Claude CLI backend. The CLIs, their account authentication, and persisted native session state live on the relay host; a remote Harness client does not need either CLI installed locally. This repository distributes the Harness client changes, not the separate relay service. Configure the relay's base URL and API key in Harness. Relay features require a matching backend and client. An ordinary API endpoint does not become a session-aware relay merely because it accepts the same API format.
 
 | Connection | Current source behavior | Requirement |
 |---|---|---|
-| Codex relay through OpenAI Chat Completions or Responses | Reuses native CLI state and sends acknowledged HTTP deltas. | Matching session-aware relay backend and client. |
+| Codex relay through OpenAI Responses (recommended) | Reuses native CLI state and sends acknowledged HTTP deltas through the direct item path. | Matching session-aware relay backend and client. |
+| Codex relay through OpenAI Chat Completions (compatibility) | Reuses native CLI state and sends acknowledged HTTP deltas through a message-to-item projection. | Matching session-aware relay backend and client; supported Chat history. |
 | Claude relay through Anthropic Messages | Reuses native CLI state and sends acknowledged HTTP deltas. | Matching backend and client with Anthropic relay support. |
 | Direct Z.ai or DeepSeek API | Sends the full current context; upstream caching follows the provider's rules. | Ordinary API credentials and provider configuration. |
 | Other ordinary providers | Retains existing provider behavior. | Normal provider requirements. |
+
+<a id="codex-protocol-choice"></a>
+
+## Codex protocol choice
+
+Prefer Responses for this project's Codex CLI relay. The relay's canonical history uses Responses-style message, function-call, and function-result items, so Responses takes the direct path. Chat Completions projects `messages`, `tool_calls`, and tool results into those items. Responses also exposes explicit `response.completed` and `response.failed` stream events; Chat uses a finishing chunk followed by `[DONE]`. This recommendation concerns this gateway's implementation, not Chat Completions deprecation.
+
+Both current Codex routes support session reuse, acknowledged deltas, gzip, reasoning controls, and service tiers where the model and endpoint accept them. Responses uses `reasoning.effort`; Chat uses `reasoning_effort`. Both use `service_tier`. Choosing Responses does not itself fix oversized requests, stream errors, or unknown native state, and it does not guarantee lower cost. The same policy of stopping on uncertain native state applies.
+
+<a id="chat-completions-compatibility"></a>
+
+## Chat Completions compatibility
+
+Chat Completions remains supported within this relay's conversion rules. The main compatibility requirements are:
+
+- Session history must use modern `tool_calls` and matching `tool_call_id` results. Legacy `function_call` history is rejected. Multiple function calls in one assistant message are supported; the client tracks their expanded canonical item count separately from the message count.
+- The Chat relay supports text, inline images in user messages, and client-defined function tools. It does not pass arbitrary multimodal content or built-in tools through to the CLI. Choosing Responses does not imply unrestricted support for those inputs either.
+- A streaming Chat checkpoint advances only after a valid `relay_ack` on a finishing chunk with `finish_reason` equal to `stop` or `tool_calls`, followed by `[DONE]`. An interrupted stream or missing `[DONE]` cannot advance it.
+- Streaming usage is emitted in a separate chunk only when the client requests `stream_options.include_usage`. A client that omits that option or ignores the usage chunk can lack displayed token statistics; the relay still accounts for the completed generation. Responses includes usage with its completed response.
+- Older unmodified Chat clients without `relay_context` use stateless requests and send full HTTP history. Session reuse and deltas need the updated client and matching backend; Responses has the same extension prerequisite.
+
+The [adapter reference](../packages/llm/llm-pi-ai/README.md) owns transport configuration. The [recovery requirements](#requirements-and-recovery) apply to either protocol when continuation state is uncertain.
 
 <a id="other-community-changes"></a>
 
