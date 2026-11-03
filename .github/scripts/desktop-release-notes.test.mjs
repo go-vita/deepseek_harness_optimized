@@ -9,6 +9,15 @@ test('older installers do not advertise changes from newer commits', () => {
   assert.match(notes, /Relay sessions and request transport/)
   assert.doesNotMatch(notes, /### Cloud desktop packaging/)
   assert.doesNotMatch(notes, /### Weekly quota visibility/)
+  assert.doesNotMatch(notes, /### Automatic Anthropic relay transport/)
+})
+test('Anthropic relay notes appear only when the feature commit is included', () => {
+  const notes = desktopReleaseNotes({ ...metadata, commits: [commit('849befe1e7')] })
+  for (const text of ['Automatic Anthropic relay transport', 'x-api-key', 'session reuse', 'incremental requests',
+    'gzip', 'full Anthropic requests', 'same logical request across retries', 'moving SDK cache hints',
+    'successful message_stop', 'updated compatible relay backend', 'Ordinary Anthropic providers']) assert.ok(notes.includes(text))
+  assert.doesNotMatch(notes, /### Cloud desktop packaging/)
+  assert.doesNotMatch(desktopReleaseNotes({ ...metadata, commits: [] }), /### Automatic Anthropic relay transport/)
 })
 test('included feature commits produce detailed scope and all commit links', () => {
   const notes = desktopReleaseNotes({ ...metadata, commits: [commit('9f73917ae5'), commit('c933b6acac'), commit('bbbbbbbbbb', 'future feature')] })

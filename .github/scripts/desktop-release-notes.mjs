@@ -27,6 +27,12 @@ const changes = [
     'Add an explicit --local --unsigned test-build mode that does not require the upstream update-service configuration. Test installers disable automatic and mandatory updates.',
   ]],
   ['1d59f2c9e5', 'Release drafts from existing builds', ['Add a manually triggered workflow that transfers installers from a successful build to a release draft within GitHub, without rebuilding or downloading and uploading through a local computer.']],
+  ['849befe1e7', 'Automatic Anthropic relay transport', [
+    'Discover compatible Anthropic relay capabilities using x-api-key authentication and automatically enable the required session reuse, incremental requests, and gzip transport.',
+    'Support full Anthropic requests and acknowledged incremental requests, preserving the same logical request across retries and normalizing moving SDK cache hints for stable history matching.',
+    'Advance checkpoints only after a successful message_stop event; interrupted and failed streams do not confirm reusable history.',
+    'Requires an updated compatible relay backend. Ordinary Anthropic providers retain their existing behavior.',
+  ]],
 ]
 
 /** Describe only changes present in the build's actual commit range. */
