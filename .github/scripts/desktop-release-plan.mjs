@@ -11,9 +11,22 @@ export function planDesktopRelease(run, workflowId, artifacts) {
   const platforms = selected.map(artifact => /^harness-(mac-arm64|mac-x64|win-x64)-/.exec(artifact.name)[1])
   if (new Set(platforms).size !== platforms.length) throw new Error('Duplicate platform artifacts in the selected build')
   return {
-    tag: `desktop-build-${run.id}-${run.run_attempt}`,
+    tag: `desktop-commit-${run.head_sha}`,
     sha: run.head_sha,
     artifactIds: selected.map(artifact => artifact.id).join(','),
     artifacts: selected.map(artifact => artifact.name),
   }
+}
+
+/** Reuse one matching draft, including drafts made by the earlier run-based workflow. */
+export function selectDesktopRelease(releases, sha) {
+  const tag = `desktop-commit-${sha}`
+  const matches = releases.filter(release => release.tag_name === tag
+    || (release.tag_name.startsWith('desktop-build-') && release.target_commitish === sha))
+  if (matches.length > 1) throw new Error('Multiple releases already exist for this commit; consolidate them before retrying')
+  const release = matches[0]
+  if (release && (!release.draft || release.target_commitish !== sha)) {
+    throw new Error('Refusing to modify a published release or a draft for another source commit')
+  }
+  return release
 }

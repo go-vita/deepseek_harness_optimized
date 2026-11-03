@@ -13,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: desktop-release-from-build-${{ inputs.build_run_id }}
+  group: desktop-release-drafts-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -73,9 +73,11 @@ jobs:
             if (!['ahead', 'identical'].includes(comparison.status) || comparison.total_commits !== comparison.commits.length) {
               throw new Error('Source history is outside the supported baseline or the changelog is incomplete');
             }
-            const body = desktopReleaseNotes({ repository: `${context.repo.owner}/${context.repo.repo}`, sha, buildUrl: process.env.BUILD_URL, commits: comparison.commits });
             const releases = await github.paginate(github.rest.repos.listReleases, { ...context.repo, per_page: 100 });
-            let release = releases.find(item => item.tag_name === tag);
+            const { selectDesktopRelease } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/desktop-release-plan.mjs`).href);
+            let release = selectDesktopRelease(releases, sha);
+            const body = desktopReleaseNotes({ repository: `${context.repo.owner}/${context.repo.repo}`, sha,
+              buildUrl: process.env.BUILD_URL, commits: comparison.commits, previousBody: release?.body ?? '' });
             if (release) {
               if (!release.draft || release.target_commitish !== sha) throw new Error('Refusing to modify a published release or a draft for another source commit');
               ({ data: release } = await github.rest.repos.updateRelease({ ...context.repo, release_id: release.id,
@@ -90,11 +92,12 @@ jobs:
               ({ data: release } = await github.rest.repos.createRelease({ ...context.repo, tag_name: tag, target_commitish: sha,
                 name: `Harness desktop test build · ${tag}`, body, draft: true, prerelease: true }));
             }
+            core.setOutput('tag', release.tag_name);
             core.setOutput('id', release.id);
             core.setOutput('url', release.html_url);
       - name: Upload installers and verify duplicate assets
         env:
-          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_ID: ${{ steps.release.outputs.id }}
         run: |
           python3 - <<'PY'

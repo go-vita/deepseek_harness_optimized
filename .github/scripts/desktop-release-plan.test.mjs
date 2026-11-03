@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { planDesktopRelease } from './desktop-release-plan.mjs'
+import { planDesktopRelease, selectDesktopRelease } from './desktop-release-plan.mjs'
 
 const run = { id: 123, workflow_id: 8, status: 'completed', conclusion: 'success', head_sha: 'a'.repeat(40), run_number: 5, run_attempt: 2 }
 const artifact = { id: 11, name: 'harness-mac-arm64-0.2.1-rc.3.20261103.5.2-unsigned', expired: false }
@@ -11,7 +11,7 @@ test('selects current attempt installers and excludes logs and previous attempts
     { ...artifact, id: 13, name: 'harness-mac-arm64-logs-123-2' }])
   assert.equal(result.artifactIds, '11')
   assert.equal(result.sha, run.head_sha)
-  assert.equal(result.tag, 'desktop-build-123-2')
+  assert.equal(result.tag, `desktop-commit-${run.head_sha}`)
 })
 test('accepts all three platforms from one build', () => {
   const result = planDesktopRelease(run, 8, [artifact, { ...artifact, id: 12, name: artifact.name.replace('mac-arm64', 'mac-x64') },
@@ -27,4 +27,22 @@ test('rejects wrong workflows, failed or running builds, missing sources and exp
 })
 test('rejects duplicate platform artifacts', () => {
   assert.throws(() => planDesktopRelease(run, 8, [artifact, { ...artifact, id: 12 }]), /Duplicate/)
+})
+
+test('different packaging runs and attempts for the same commit share a release tag', () => {
+  const first = planDesktopRelease(run, 8, [artifact])
+  const second = planDesktopRelease({ ...run, id: 456, run_number: 7, run_attempt: 1 }, 8,
+    [{ ...artifact, name: artifact.name.replace('.5.2-', '.7.1-') }])
+  assert.equal(first.tag, second.tag)
+  assert.notEqual(first.tag, planDesktopRelease({ ...run, head_sha: 'b'.repeat(40) }, 8, [artifact]).tag)
+})
+test('reuses canonical and legacy drafts while rejecting ambiguous or published releases', () => {
+  const legacy = { tag_name: 'desktop-build-123-2', target_commitish: run.head_sha, draft: true }
+  const canonical = { ...legacy, tag_name: `desktop-commit-${run.head_sha}` }
+  assert.equal(selectDesktopRelease([legacy], run.head_sha), legacy)
+  assert.equal(selectDesktopRelease([canonical], run.head_sha), canonical)
+  assert.equal(selectDesktopRelease([], run.head_sha), undefined)
+  assert.throws(() => selectDesktopRelease([legacy, canonical], run.head_sha), /Multiple releases/)
+  assert.throws(() => selectDesktopRelease([{ ...canonical, draft: false }], run.head_sha), /published/)
+  assert.throws(() => selectDesktopRelease([{ ...canonical, target_commitish: 'b'.repeat(40) }], run.head_sha), /another source/)
 })

@@ -27,3 +27,14 @@ test('upgrades the original default draft and preserves other unmarked descripti
   assert.equal(mergeDesktopReleaseNotes('Unsigned desktop test packages.\nOld notes', 'new'), 'new')
   assert.equal(mergeDesktopReleaseNotes('My notes', 'new'), 'My notes\n\nnew')
 })
+
+test('adding another platform preserves original build links without repeating run links', () => {
+  const firstUrl = 'https://github.com/example/harness/actions/runs/123'
+  const secondUrl = 'https://github.com/example/harness/actions/runs/456'
+  const first = desktopReleaseNotes({ ...metadata, buildUrl: firstUrl, commits: [] })
+  const second = desktopReleaseNotes({ ...metadata, buildUrl: secondUrl, previousBody: first, commits: [] })
+  assert.ok(second.includes(firstUrl))
+  assert.ok(second.includes(secondUrl))
+  const retry = desktopReleaseNotes({ ...metadata, buildUrl: secondUrl, previousBody: second, commits: [] })
+  assert.equal(retry, second)
+})

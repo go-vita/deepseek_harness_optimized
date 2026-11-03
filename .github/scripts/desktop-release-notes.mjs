@@ -30,14 +30,18 @@ const changes = [
 ]
 
 /** Describe only changes present in the build's actual commit range. */
-export function desktopReleaseNotes({ repository, sha, buildUrl, commits }) {
+export function desktopReleaseNotes({ repository, sha, buildUrl, commits, previousBody = '' }) {
   const included = changes.filter(([prefix]) => commits.some(commit => commit.sha.startsWith(prefix)))
   const sections = included.map(([, title, items]) => `### ${title}\n\n${items.map(item => `- ${item}`).join('\n')}`)
   const list = commits.map(commit => {
     const subject = commit.commit.message.split('\n')[0].replace(/[<>]/g, '')
     return `- [${commit.sha.slice(0, 10)}](https://github.com/${repository}/commit/${commit.sha}) ${subject}`
   }).join('\n')
-  return `${START}\n## Build information\n\n- [Original packaging run](${buildUrl})\n- Source commit:\`${sha}\`\n- [Full diff against the upstream baseline](https://github.com/${repository}/compare/22ddee3792...${sha})\n\n## Changes\n\nThese notes describe the Harness changes included in this installer relative to the upstream baseline. Relay-server changes are outside this release.\n\n${sections.join('\n\n')}\n\n## Included commits\n\n${list || 'No changes from the upstream baseline.'}\n\n## Installation and limitations\n\n- Choose the .dmg for your Mac architecture (ARM64 or Intel x64), or the .exe for Windows x64. The Source code archives are not installers.\n- This is an unsigned test release. macOS packages are not notarized by Apple, and Windows packages are not code-signed. Your operating system may display a security warning.\n- Automatic and mandatory updates are disabled in these test packages. Install future versions manually.\n- Session reuse, incremental requests, and weekly quota visibility depend on provider configuration, protocol support, and API key permissions.\n- A successful build does not establish that all features have been tested on every platform. Verify installation, startup, and key functionality on the target system before publishing.\n${END}`
+  const runPrefix = `https://github.com/${repository}/actions/runs/`
+  const previousUrls = (previousBody.match(/https:\/\/github\.com\/[^\s)]+\/actions\/runs\/[0-9]+/g) ?? [])
+    .filter(url => url.startsWith(runPrefix))
+  const buildLinks = [...new Set([...previousUrls, buildUrl])].map(url => `- [Original packaging run](${url})`).join('\n')
+  return `${START}\n## Build information\n\n${buildLinks}\n- Source commit:\`${sha}\`\n- [Full diff against the upstream baseline](https://github.com/${repository}/compare/22ddee3792...${sha})\n\n## Changes\n\nThese notes describe the Harness changes included in this installer relative to the upstream baseline. Relay-server changes are outside this release.\n\n${sections.join('\n\n')}\n\n## Included commits\n\n${list || 'No changes from the upstream baseline.'}\n\n## Installation and limitations\n\n- Choose the .dmg for your Mac architecture (ARM64 or Intel x64), or the .exe for Windows x64. The Source code archives are not installers.\n- This is an unsigned test release. macOS packages are not notarized by Apple, and Windows packages are not code-signed. Your operating system may display a security warning.\n- Automatic and mandatory updates are disabled in these test packages. Install future versions manually.\n- Session reuse, incremental requests, and weekly quota visibility depend on provider configuration, protocol support, and API key permissions.\n- A successful build does not establish that all features have been tested on every platform. Verify installation, startup, and key functionality on the target system before publishing.\n${END}`
 }
 
 /** Refresh generated notes while preserving text manually added outside the managed block. */
