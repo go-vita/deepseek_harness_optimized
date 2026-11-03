@@ -2,6 +2,18 @@
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
+  relayTitle: 'Relay transport',
+  relaySavedHint: 'Applies to the saved provider settings.',
+  relayChecking: 'Checking relay capabilities…',
+  relayUnavailable: 'Could not verify relay capabilities. Save your settings and try again.',
+  relayRequired: 'Required by this relay. Enabled automatically and cannot be disabled.',
+  relayConfigured: 'Enabled by provider configuration.',
+  relayStandard: 'No compatible relay detected. Standard API behavior is used.',
+  relaySessionReuse: 'Session reuse',
+  relayDeltaRequests: 'Incremental requests',
+  relayGzipRequests: 'Request compression (gzip)',
+  relayRefresh: 'Check again',
+  relayAfterSave: 'Compatible relay features are detected automatically after you save the provider.',
   nav: 'Models',
   deepSeekAccount: 'DeepSeek Account',
   title: 'Models',
@@ -146,6 +158,18 @@ export type ModelsKey = keyof typeof en
 
 /** Chinese strings (same keys as {@link en}). */
 export const zh: { [Key in keyof typeof en]: string } = {
+  relayTitle: '中转传输',
+  relaySavedHint: '显示已保存的供应商配置的生效状态。',
+  relayChecking: '正在检查中转能力…',
+  relayUnavailable: '无法确认中转能力，请保存设置后重试。',
+  relayRequired: '此中转要求启用这些能力，客户端已自动开启，无法取消。',
+  relayConfigured: '已通过供应商配置启用。',
+  relayStandard: '未识别到兼容中转，使用标准 API 行为。',
+  relaySessionReuse: '会话复用',
+  relayDeltaRequests: '增量请求',
+  relayGzipRequests: '请求压缩（gzip）',
+  relayRefresh: '重新检查',
+  relayAfterSave: '保存供应商后，客户端将自动识别兼容中转并启用相应能力。',
   nav: '模型',
   deepSeekAccount: 'DeepSeek 账号',
   title: '模型',
@@ -287,6 +311,18 @@ export const zh: { [Key in keyof typeof en]: string } = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  relayTitle: 'リレー転送',
+  relaySavedHint: '保存済みのプロバイダー設定に適用されます。',
+  relayChecking: 'リレー機能を確認中…',
+  relayUnavailable: 'リレー機能を確認できません。設定を保存して再試行してください。',
+  relayRequired: 'このリレーで必須です。自動的に有効になり、無効にできません。',
+  relayConfigured: 'プロバイダー設定で有効になっています。',
+  relayStandard: '対応するリレーが見つかりません。標準 API を使用します。',
+  relaySessionReuse: 'セッションの再利用',
+  relayDeltaRequests: '差分リクエスト',
+  relayGzipRequests: 'リクエスト圧縮（gzip）',
+  relayRefresh: '再確認',
+  relayAfterSave: '保存後、対応するリレーの機能が自動的に検出されます。',
   'nav': 'モデル',
   'deepSeekAccount': 'DeepSeekアカウント',
   'title': 'モデル',
@@ -428,6 +464,18 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  relayTitle: 'Transporte del relay',
+  relaySavedHint: 'Se aplica a la configuración guardada del proveedor.',
+  relayChecking: 'Comprobando funciones del relay…',
+  relayUnavailable: 'No se pudieron verificar las funciones. Guarda la configuración y reinténtalo.',
+  relayRequired: 'Este relay requiere estas funciones. Se activan automáticamente y no se pueden desactivar.',
+  relayConfigured: 'Activado mediante la configuración del proveedor.',
+  relayStandard: 'No se detectó un relay compatible. Se usa la API estándar.',
+  relaySessionReuse: 'Reutilización de sesiones',
+  relayDeltaRequests: 'Solicitudes incrementales',
+  relayGzipRequests: 'Compresión de solicitudes (gzip)',
+  relayRefresh: 'Comprobar de nuevo',
+  relayAfterSave: 'Las funciones del relay compatible se detectan automáticamente después de guardar el proveedor.',
   nav: 'Modelos',
   deepSeekAccount: 'Cuenta DeepSeek',
   title: 'Modelos',
@@ -569,6 +617,18 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  relayTitle: 'Transport du relais',
+  relaySavedHint: 'Appliqué aux paramètres enregistrés du fournisseur.',
+  relayChecking: 'Vérification des fonctions du relais…',
+  relayUnavailable: 'Impossible de vérifier les fonctions. Enregistrez les paramètres et réessayez.',
+  relayRequired: 'Ces fonctions sont requises par le relais. Elles sont activées automatiquement et ne peuvent pas être désactivées.',
+  relayConfigured: 'Activé dans les paramètres du fournisseur.',
+  relayStandard: 'Aucun relais compatible détecté. Utilisation de l’API standard.',
+  relaySessionReuse: 'Réutilisation des sessions',
+  relayDeltaRequests: 'Requêtes incrémentales',
+  relayGzipRequests: 'Compression des requêtes (gzip)',
+  relayRefresh: 'Vérifier à nouveau',
+  relayAfterSave: 'Les fonctions du relais compatible sont détectées automatiquement après l’enregistrement du fournisseur.',
   nav: 'Modèles',
   deepSeekAccount: 'Compte DeepSeek',
   title: 'Modèles',
@@ -710,6 +770,18 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  relayTitle: 'Relay-Transport',
+  relaySavedHint: 'Gilt für die gespeicherten Anbietereinstellungen.',
+  relayChecking: 'Relay-Funktionen werden geprüft…',
+  relayUnavailable: 'Relay-Funktionen konnten nicht geprüft werden. Einstellungen speichern und erneut versuchen.',
+  relayRequired: 'Von diesem Relay erforderlich. Automatisch aktiviert und nicht deaktivierbar.',
+  relayConfigured: 'Durch die Anbieterkonfiguration aktiviert.',
+  relayStandard: 'Kein kompatibles Relay erkannt. Die Standard-API wird verwendet.',
+  relaySessionReuse: 'Sitzungswiederverwendung',
+  relayDeltaRequests: 'Inkrementelle Anfragen',
+  relayGzipRequests: 'Anfragekomprimierung (gzip)',
+  relayRefresh: 'Erneut prüfen',
+  relayAfterSave: 'Kompatible Relay-Funktionen werden nach dem Speichern des Anbieters automatisch erkannt.',
   nav: 'Modelle',
   deepSeekAccount: 'DeepSeek-Konto',
   title: 'Modelle',
@@ -851,6 +923,18 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  relayTitle: 'Транспорт ретранслятора',
+  relaySavedHint: 'Применяется к сохранённым настройкам провайдера.',
+  relayChecking: 'Проверка возможностей ретранслятора…',
+  relayUnavailable: 'Не удалось проверить возможности. Сохраните настройки и повторите попытку.',
+  relayRequired: 'Эти функции обязательны для ретранслятора. Они включены автоматически, отключение недоступно.',
+  relayConfigured: 'Включено в настройках провайдера.',
+  relayStandard: 'Совместимый ретранслятор не обнаружен. Используется стандартный API.',
+  relaySessionReuse: 'Повторное использование сеансов',
+  relayDeltaRequests: 'Инкрементальные запросы',
+  relayGzipRequests: 'Сжатие запросов (gzip)',
+  relayRefresh: 'Проверить снова',
+  relayAfterSave: 'Возможности совместимого ретранслятора определяются автоматически после сохранения провайдера.',
   nav: 'Модели',
   deepSeekAccount: 'DeepSeek Аккаунт',
   title: 'Модели',
@@ -992,6 +1076,18 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  relayTitle: 'Transporte do relay',
+  relaySavedHint: 'Aplica-se às configurações salvas do provedor.',
+  relayChecking: 'Verificando recursos do relay…',
+  relayUnavailable: 'Não foi possível verificar os recursos. Salve as configurações e tente novamente.',
+  relayRequired: 'Obrigatório para este relay. Ativado automaticamente e não pode ser desativado.',
+  relayConfigured: 'Ativado pela configuração do provedor.',
+  relayStandard: 'Nenhum relay compatível detectado. A API padrão é usada.',
+  relaySessionReuse: 'Reutilização de sessões',
+  relayDeltaRequests: 'Solicitações incrementais',
+  relayGzipRequests: 'Compressão de solicitações (gzip)',
+  relayRefresh: 'Verificar novamente',
+  relayAfterSave: 'Os recursos do relay compatível são detectados automaticamente após salvar o provedor.',
   nav: 'Modelos',
   deepSeekAccount: 'DeepSeek Conta',
   title: 'Modelos',

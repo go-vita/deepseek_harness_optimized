@@ -99,6 +99,10 @@ export interface PiAiAdapterOptions {
    * `MISSING_CREDENTIAL` rather than falling back.
    */
   resolveApiKey: (provider: string, profile: ResolvedPiAiProviderProfile) => Promise<string | undefined>
+  /** Identify compatible relays and require their session transport features for this call. */
+  resolveRelayCapabilities?: (
+    profile: ResolvedPiAiProviderProfile, apiKey: string | undefined, signal?: AbortSignal, api?: string,
+  ) => Promise<boolean>
   /**
    * How every collection this adapter builds resolves auth the request-level
    * `apiKey` override does not cover. Required rather than optional: a
@@ -270,6 +274,8 @@ function requestHeaders(headers: Readonly<Record<string, string>> | undefined): 
  * restart; model descriptors come from the collection those profiles built.
  */
 export class PiAiAdapter extends LlmAdapter {
+  private readonly autoRelayProfiles = new WeakSet<ResolvedPiAiProviderProfile>()
+
   private snapshot: PiAiSnapshot | undefined
 
   constructor(private readonly config: PiAiAdapterOptions) {
@@ -319,11 +325,11 @@ export class PiAiAdapter extends LlmAdapter {
     if (resolved === undefined) {
       throw new LlmError(`pi-ai provider "${provider}" has no configured model "${model}"`, 'UNKNOWN_MODEL')
     }
-    if (profile.relayDeltaRequests === true && (profile.relaySessionReuse !== true
+    if (!this.autoRelayProfiles.has(profile) && profile.relayDeltaRequests === true && (profile.relaySessionReuse !== true
       || (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions'))) {
       throw new LlmError('relayDeltaRequests requires relaySessionReuse and an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
     }
-    if (profile.relaySessionReuse === true) {
+    if (profile.relaySessionReuse === true || this.autoRelayProfiles.has(profile)) {
       if (resolved.api !== 'openai-responses' && resolved.api !== 'openai-completions') {
         throw new LlmError('relaySessionReuse requires an OpenAI Responses or Chat Completions route', 'INVALID_CONFIG')
       }
@@ -373,6 +379,37 @@ export class PiAiAdapter extends LlmAdapter {
     })
   }
 
+  /**
+   * Report effective transport settings for one saved provider without generating content.
+   * @param provider - Saved provider route.
+   * @param signal - Cancellation for capability discovery.
+   * @returns Required relay transport and the effective feature flags.
+   */
+  async relayTransportStatus(provider: string, signal?: AbortSignal): Promise<{
+    required: boolean
+    sessionReuse: boolean
+    deltaRequests: boolean
+    gzipRequests: boolean
+  }> {
+    const snapshot = this.current()
+    const profile = this.profileOf(snapshot, provider)
+    const api = snapshot.models.getModels(provider)[0]?.api ?? profile.api
+    const key = await this.config.resolveApiKey(provider, profile)
+    const required = await this.config.resolveRelayCapabilities?.(profile, key, signal, api) ?? false
+    if (required) this.autoRelayProfiles.add(profile)
+    return { required, sessionReuse: required || profile.relaySessionReuse === true,
+      deltaRequests: required || profile.relayDeltaRequests === true, gzipRequests: required || profile.gzipRequests === true }
+  }
+
+  private async negotiateRelay(snapshot: PiAiSnapshot, provider: string, model: string, signal?: AbortSignal): Promise<void> {
+    if (this.config.resolveRelayCapabilities === undefined) return
+    const profile = this.profileOf(snapshot, provider)
+    if (profile.relaySessionReuse && profile.relayDeltaRequests && profile.gzipRequests) return
+    const key = await this.config.resolveApiKey(provider, profile)
+    const required = await this.config.resolveRelayCapabilities(profile, key, signal, this.modelOf(snapshot, provider, model).api)
+    if (required) this.autoRelayProfiles.add(profile)
+  }
+
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
@@ -394,12 +431,13 @@ export class PiAiAdapter extends LlmAdapter {
     }
   }
 
-  override prepareCall(provider: string, model: string, _signal?: AbortSignal): Promise<PreparedAdapterCall> {
+  override async prepareCall(provider: string, model: string, signal?: AbortSignal): Promise<PreparedAdapterCall> {
     const snapshot = this.current()
-    return Promise.resolve({
+    await this.negotiateRelay(snapshot, provider, model, signal)
+    return {
       model: this.modelInfo(snapshot, provider, model),
       stream: options => this.streamWithSnapshot(options, snapshot),
-    })
+    }
   }
 
   stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
@@ -418,7 +456,14 @@ export class PiAiAdapter extends LlmAdapter {
     // snapshot, and the credential freezes with them. A configuration change
     // mid-request builds a separate snapshot, so this request finishes under
     // the one it started with and the next call picks up the new one.
-    const profile = this.profileOf(snapshot, options.provider)
+    let profile = this.profileOf(snapshot, options.provider)
+    const selectedModel = this.modelOf(snapshot, options.provider, options.model)
+    const apiKey = await this.config.resolveApiKey(options.provider, profile)
+    if (!(profile.relaySessionReuse && profile.relayDeltaRequests && profile.gzipRequests)
+      && await this.config.resolveRelayCapabilities?.(profile, apiKey, options.signal, selectedModel.api)) {
+      this.autoRelayProfiles.add(profile)
+      profile = { ...profile, relaySessionReuse: true, relayDeltaRequests: true, gzipRequests: true }
+    }
     const model = this.modelOf(snapshot, options.provider, options.model)
     const updates = conversationUpdates(model)
     // pi-ai collapses Anthropic tool updates without an initially active declaration.
@@ -437,8 +482,6 @@ export class PiAiAdapter extends LlmAdapter {
     const relayContext = profile.relaySessionReuse === true
       ? relayContextFor(options, options.sessionId === undefined ? undefined : this.config.resolveSessionGeneration?.(options.sessionId))
       : undefined
-    const apiKey = await this.config.resolveApiKey(options.provider, profile)
-
     const consumer = new AbortController()
     const upstream = options.signal === undefined
       ? consumer.signal

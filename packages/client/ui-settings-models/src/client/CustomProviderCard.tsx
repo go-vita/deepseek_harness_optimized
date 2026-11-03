@@ -311,6 +311,8 @@ export function CustomProviderCard(props: CustomProviderCardProps): ReactNode {
       {/* Only the gates with something to say render; the route-id gate has its
           own field-level hint, so its blocked state would print an empty line. */}
       {hint === undefined ? null : <p className={styles['advancedHint']}>{hint}</p>}
+      {protocol === 'openai-completions' || protocol === 'openai-responses'
+        ? <p className={styles['advancedHint']}>{t('relayAfterSave')}</p> : null}
       <EditorFooter
         t={t}
         busy={busy}

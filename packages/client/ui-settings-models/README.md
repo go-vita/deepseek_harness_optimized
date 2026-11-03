@@ -13,6 +13,8 @@ Desktop product events use the optional [product analytics service](../product-a
 
 `dsh-client-ui-settings-models` is the Models settings page of the dsh web client: users configure API keys (stored write-only under the profile's credential reference), edit each provider's model list, and hand-declare custom pi-ai routes, with provider rows and one editor card at a time. The page joins the provider directory, the settings document, and the credential descriptions into one shared snapshot, so a row's state stays consistent across all three. It also walks first-run users through two ordered dialogs — a versioned preview notice and the conditional official-DeepSeek credential step.
 
+Compatible relay transport appears in each saved pi-ai provider editor as read-only effective settings for session reuse, incremental requests, and gzip compression. A recognized relay requires all three, so the client enables them automatically and displays checked, disabled controls. The status describes saved settings; save endpoint or credential changes before checking again. Capability checks use the authenticated Host connection and never expose provider API keys to the browser.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

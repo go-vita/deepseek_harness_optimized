@@ -76,6 +76,10 @@ export async function mockServer(script: {
   const requestReceived = Promise.withResolvers<undefined>()
   const responseClosed = Promise.withResolvers<undefined>()
   const server = createServer((request: IncomingMessage, response: ServerResponse) => {
+    if (request.method === 'GET' && request.url?.endsWith('/relay-capabilities')) {
+      response.writeHead(404); response.end(); return
+    }
+
     let timer: ReturnType<typeof setTimeout> | undefined
     response.on('close', () => {
       clearTimeout(timer)

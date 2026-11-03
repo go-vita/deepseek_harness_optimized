@@ -69,6 +69,7 @@ import { deepEqualJson } from '@deepseek-ai/dsh-util-values'
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProvider, catalogProviderIds } from './catalog.ts'
+import { createRelayCapabilityResolver } from './relay-capabilities.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
 import type { ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -251,6 +252,7 @@ export function apply(ctx: Context, config: Config): void {
   // a configuration change causes, and a sign-in survives one.
   const auth = { credentials: credentialStoreFrom(ctx), authContext: authContextFrom(ctx) }
   const adapter = new PiAiAdapter({
+    resolveRelayCapabilities: createRelayCapabilityResolver(),
     profiles,
     resolveApiKey,
     auth,
@@ -267,6 +269,27 @@ export function apply(ctx: Context, config: Config): void {
         + ` sending that message as provider-neutral content (${reason})`,
       )
     },
+  })
+  ctx.inject(['connection'], (scope) => {
+    scope.effect(() => scope.connection.fetch.register({
+      path: '/api/provider-relay-capabilities', methods: ['POST'], requestBody: 'buffered',
+      fetch: async (request) => {
+        const response = (value: unknown, status = 200) => Response.json(value, { status, headers: { 'Cache-Control': 'no-store' } })
+        try {
+          const text = await request.text()
+          if (text.length > 4096) return response({ error: 'invalid provider' }, 400)
+          const body: unknown = JSON.parse(text)
+          if (typeof body !== 'object' || body === null || !('provider' in body) || typeof body.provider !== 'string') {
+            return response({ error: 'invalid provider' }, 400)
+          }
+          if (!profiles().has(body.provider)) return response({ error: 'unknown provider' }, 404)
+          return response(await adapter.relayTransportStatus(body.provider, request.signal))
+        } catch (_error) {
+          // Provider diagnostics can contain endpoint details; the settings UI renders its own localized failure.
+          return response({ error: 'relay capability check unavailable' }, 502)
+        }
+      },
+    }), 'llm-pi-ai: relay capabilities')
   })
   // Independent of the route set: signing in is what makes a route worth
   // adding, so the flows are offered before any profile names their provider.
