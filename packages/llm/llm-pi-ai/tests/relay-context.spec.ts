@@ -6,7 +6,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { relayContextFor, relayContextWithPayload } from '../src/relay-context.ts'
 import { PiAiAdapter } from '../src/adapter.ts'
-import { Config, resolveProfiles } from '../src/config.ts'
+import { resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 
@@ -52,9 +52,9 @@ describe('relay request identities', () => {
 
 it('sends opt-in relay metadata through SDK payload hooks with existing controls intact', async () => {
   const server = await mockServer([{ events: textEvents }, { events: textEvents }, { events: textEvents }])
-  const configured = Config({ providers: { relay: { api: 'openai-completions', baseURL: server.url,
+  const configured = ({ providers: { relay: { api: 'openai-completions', baseURL: server.url,
     relaySessionReuse: true, models: [{ id: 'gpt-test' }] } } })
-  const adapter = new PiAiAdapter({ profiles: () => resolveProfiles(configured.providers.get()),
+  const adapter = new PiAiAdapter({ profiles: () => resolveProfiles(configured.providers),
     resolveApiKey: () => Promise.resolve('test-key'), auth: memoryAuth(), resolveSessionGeneration: () => 7 })
   const first = markAgentLoopRequest({ ...request(), serviceTier: 'priority' as const })
   for await (const _chunk of adapter.stream(first)) { /* drain */ }
@@ -103,7 +103,7 @@ it('preserves the initial Responses instruction/tool prefix across appended main
   const tools = [{ name: 'read', description: 'Read a file', parameters: { type: 'object', properties: {} } }]
   const first = markAgentLoopRequest({ ...original, messages: [initial, ...original.messages], tools })
   const second = markAgentLoopRequest({ ...first, messages: [...first.messages,
-    createAssistantMessage({ source: { kind: 'model', provider: 'relay', model: 'gpt-test' }, content: [{ type: 'text', text: 'Earlier answer.' }] }),
+    createAssistantMessage({ source: { provider: 'relay', model: 'gpt-test' }, content: [{ type: 'text', text: 'Earlier answer.' }] }),
     createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue.' }] }),
   ] })
   const third = markAgentLoopRequest({ ...second, messages: [...second.messages,

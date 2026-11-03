@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { gunzipSync } from 'node:zlib'
 import { gzipRequestFetch } from '../src/request-compression.ts'
-import { Config, resolveProfiles } from '../src/config.ts'
+import { resolveProfiles } from '../src/config.ts'
 import { PiAiAdapter } from '../src/adapter.ts'
 import { memoryAuth } from './auth-double.ts'
 import { closeMockServers, mockServer } from './mock-server.ts'
@@ -9,7 +9,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 
 afterEach(async () => { vi.unstubAllGlobals(); await closeMockServers() })
 it('compresses a large JSON body without changing its contents or auth headers', async () => {
-  const fetcher = vi.fn(async () => new Response('ok'))
+  const fetcher = vi.fn<typeof fetch>(async () => new Response('ok'))
   vi.stubGlobal('fetch', fetcher)
   const body = JSON.stringify({ input: '汉字 and "quotes"\n'.repeat(5000) })
   await gzipRequestFetch('https://example.test/v1/responses', { method: 'POST', body,
@@ -21,7 +21,7 @@ it('compresses a large JSON body without changing its contents or auth headers',
   expect(gunzipSync(Buffer.from(init.body as Uint8Array)).toString()).toBe(body)
 })
 it('passes small or already encoded requests through unchanged', async () => {
-  const fetcher = vi.fn(async () => new Response('ok')); vi.stubGlobal('fetch', fetcher)
+  const fetcher = vi.fn<typeof fetch>(async () => new Response('ok')); vi.stubGlobal('fetch', fetcher)
   const small: RequestInit = { body: '{}', headers: { 'content-type': 'application/json' } }
   await gzipRequestFetch('https://example.test', small)
   expect(fetcher.mock.calls[0]?.[1]).toBe(small)
@@ -40,9 +40,9 @@ it('compresses real pi-ai Responses SDK requests when enabled on that provider',
     { type: 'response.output_item.done', output_index: 0, item }, { type: 'response.completed', response },
   ].map(frame => ({ event: frame.type, data: JSON.stringify(frame) }))
   const server = await mockServer([{ events }])
-  const configured = Config({ providers: { relay: { api: 'openai-responses', baseURL: server.url,
+  const configured = ({ providers: { relay: { api: 'openai-responses', baseURL: server.url,
     apiKeyEnv: 'PI_TEST_KEY', gzipRequests: true, models: [{ id: 'gpt-test' }] } } })
-  const profiles = resolveProfiles(configured.providers.get())
+  const profiles = resolveProfiles(configured.providers)
   const adapter = new PiAiAdapter({ profiles: () => profiles, resolveApiKey: () => Promise.resolve('test-key'), auth: memoryAuth() })
   const message = createUserMessage({ content: [{ type: 'text', text: 'large history '.repeat(6000) }],
     source: { kind: 'model', provider: 'relay', model: 'gpt-test' } })

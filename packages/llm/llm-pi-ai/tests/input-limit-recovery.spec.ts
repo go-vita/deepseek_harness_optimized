@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from 'vitest'
 import { CONTEXT_WINDOW_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '../src/adapter.ts'
-import { Config, resolveProfiles } from '../src/config.ts'
+import { resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 import { closeMockServers, mockServer } from './mock-server.ts'
 afterEach(closeMockServers)
@@ -11,8 +11,8 @@ it('maps relay input-size SSE failure into the compaction recovery code', async 
   const events = [{ type: 'response.created', response: { ...response, status: 'in_progress', error: null } },
     { type: 'response.failed', response }].map(frame => ({ event: frame.type, data: JSON.stringify(frame) }))
   const server = await mockServer([{ events }])
-  const configured = Config({ providers: { relay: { api: 'openai-responses', apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url, models: [{ id: 'gpt-test' }] } } })
-  const profiles = resolveProfiles(configured.providers.get())
+  const configured = ({ providers: { relay: { api: 'openai-responses', apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url, models: [{ id: 'gpt-test' }] } } })
+  const profiles = resolveProfiles(configured.providers)
   const adapter = new PiAiAdapter({ profiles: () => profiles, resolveApiKey: () => Promise.resolve('test-key'), auth: memoryAuth() })
   const chunks = []
   for await (const chunk of adapter.stream({ provider: 'relay', model: 'gpt-test', messages: [] })) chunks.push(chunk)

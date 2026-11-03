@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { PiAiAdapter } from '../src/adapter.ts'
-import { Config, resolveProfiles } from '../src/config.ts'
+import { resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
 
@@ -24,11 +24,11 @@ function responseEvents() {
 describe.each(['openai-completions', 'openai-responses'] as const)('%s reasoning values', (api) => {
   it.each(efforts)('advertises and sends %s unchanged alongside session Fast mode', async (effort) => {
     const server = await mockServer([{ events: api === 'openai-responses' ? responseEvents() : textEvents }])
-    const configured = Config({ providers: { relay: {
+    const configured = ({ providers: { relay: {
       api, apiKeyEnv: 'PI_TEST_KEY', baseURL: server.url,
       models: [{ id: 'gpt-6.1-sol', reasoningEfforts: Object.fromEntries(efforts.map(value => [value, value])) }],
     } } })
-    const profiles = resolveProfiles(configured.providers.get())
+    const profiles = resolveProfiles(configured.providers)
     const adapter = new PiAiAdapter({ profiles: () => profiles, resolveApiKey: () => Promise.resolve('local-test-key'), auth: memoryAuth() })
     const info = await adapter.resolveModel('relay', 'gpt-6.1-sol')
     expect(info.reasoning?.efforts.map(value => String(value.id))).toEqual(efforts)

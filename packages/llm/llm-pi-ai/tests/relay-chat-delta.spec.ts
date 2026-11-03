@@ -46,7 +46,7 @@ it('streams Chat through the real SDK with full, delta and byte-equivalent retri
     })
     for await (const _chunk of adapter.stream(first)) { /* drain */ }
     const second = markAgentLoopRequest({ ...first, messages: [...first.messages,
-      createAssistantMessage({ source: { kind: 'model', provider: 'relay', model: 'gpt-test' }, content: [{ type: 'text', text: 'hello' }] }),
+      createAssistantMessage({ source: { provider: 'relay', model: 'gpt-test' }, content: [{ type: 'text', text: 'hello' }] }),
       createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'continue' }] }),
     ] })
     for await (const _chunk of adapter.stream(second)) { /* drain */ }
