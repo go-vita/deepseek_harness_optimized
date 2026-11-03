@@ -19,13 +19,14 @@ export function planDesktopRelease(run, workflowId, artifacts) {
 }
 
 /** Reuse one matching draft, including drafts made by the earlier run-based workflow. */
-export function selectDesktopRelease(releases, sha) {
+export function selectDesktopRelease(releases, sha, { allowPublishedPrerelease = false } = {}) {
   const tag = `desktop-commit-${sha}`
   const matches = releases.filter(release => release.tag_name === tag
     || (release.tag_name.startsWith('desktop-build-') && release.target_commitish === sha))
   if (matches.length > 1) throw new Error('Multiple releases already exist for this commit; consolidate them before retrying')
   const release = matches[0]
-  if (release && (!release.draft || release.target_commitish !== sha)) {
+  if (release && (release.target_commitish !== sha
+    || (!release.draft && !(allowPublishedPrerelease && release.prerelease && !release.immutable)))) {
     throw new Error('Refusing to modify a published release or a draft for another source commit')
   }
   return release

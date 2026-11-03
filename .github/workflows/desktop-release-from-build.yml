@@ -7,6 +7,15 @@ on:
         description: 'Successful packaging run ID (the number after actions/runs/ in its URL)'
         type: string
         required: true
+  workflow_call:
+    inputs:
+      build_run_id:
+        type: string
+        required: true
+      publish_release:
+        type: boolean
+        default: false
+        required: false
 
 permissions:
   actions: read
@@ -63,6 +72,7 @@ jobs:
           RELEASE_TAG: ${{ steps.plan.outputs.tag }}
           SOURCE_SHA: ${{ steps.plan.outputs.sha }}
           BUILD_URL: ${{ steps.plan.outputs.run_url }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release || false }}
         with:
           script: |
             const tag = process.env.RELEASE_TAG;
@@ -75,11 +85,10 @@ jobs:
             }
             const releases = await github.paginate(github.rest.repos.listReleases, { ...context.repo, per_page: 100 });
             const { selectDesktopRelease } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/desktop-release-plan.mjs`).href);
-            let release = selectDesktopRelease(releases, sha);
+            let release = selectDesktopRelease(releases, sha, { allowPublishedPrerelease: process.env.PUBLISH_RELEASE === 'true' });
             const body = desktopReleaseNotes({ repository: `${context.repo.owner}/${context.repo.repo}`, sha,
               buildUrl: process.env.BUILD_URL, commits: comparison.commits, previousBody: release?.body ?? '' });
             if (release) {
-              if (!release.draft || release.target_commitish !== sha) throw new Error('Refusing to modify a published release or a draft for another source commit');
               ({ data: release } = await github.rest.repos.updateRelease({ ...context.repo, release_id: release.id,
                 body: mergeDesktopReleaseNotes(release.body ?? '', body) }));
             } else {
@@ -99,6 +108,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
           RELEASE_ID: ${{ steps.release.outputs.id }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release || false }}
+          SOURCE_SHA: ${{ steps.plan.outputs.sha }}
         run: |
           python3 - <<'PY'
           import hashlib, json, os, pathlib, subprocess
@@ -108,8 +119,9 @@ jobs:
               raise SystemExit('Missing installers or conflicting asset names')
           endpoint = f"repos/{os.environ['GH_REPO']}/releases/{os.environ['RELEASE_ID']}"
           release = json.loads(subprocess.check_output(['gh', 'api', endpoint]))
-          if not release['draft']:
-              raise SystemExit('Release was published during upload; refusing to modify it')
+          allow_published = os.environ.get('PUBLISH_RELEASE') == 'true' and release['prerelease'] and not release.get('immutable', False)
+          if release['target_commitish'] != os.environ['SOURCE_SHA'] or (not release['draft'] and not allow_published):
+              raise SystemExit('Refusing to upload to this release state or source commit')
           existing = {a['name']: a for a in json.loads(subprocess.check_output(['gh', 'api', endpoint + '/assets?per_page=100']))}
           for path in files:
               if not path.name.startswith('deepseek-harness-') or path.is_symlink():
@@ -123,7 +135,37 @@ jobs:
                   continue
               subprocess.run(['gh', 'release', 'upload', os.environ['RELEASE_TAG'], str(path)], check=True)
           PY
+      - name: Publish completed test release
+        if: inputs.publish_release == true
+        id: published
+        uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ steps.release.outputs.id }}
+          SOURCE_SHA: ${{ steps.plan.outputs.sha }}
+        with:
+          script: |
+            const release_id = Number(process.env.RELEASE_ID);
+            let { data: release } = await github.rest.repos.getRelease({ ...context.repo, release_id });
+            if (release.target_commitish !== process.env.SOURCE_SHA || !release.prerelease || release.immutable) {
+              throw new Error('Refusing to publish a mismatched, stable, or immutable release');
+            }
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, { ...context.repo, release_id, per_page: 100 });
+            if (assets.length === 0 || assets.some(asset => asset.state !== 'uploaded' || asset.size === 0)) {
+              throw new Error('Release assets are missing or incomplete');
+            }
+            if (release.draft) {
+              ({ data: release } = await github.rest.repos.updateRelease({ ...context.repo, release_id,
+                draft: false, prerelease: true, make_latest: 'false' }));
+            }
+            core.setOutput('url', release.html_url);
+      - name: Link published release
+        if: inputs.publish_release == true
+        env:
+          RELEASE_URL: ${{ steps.published.outputs.url }}
+        run: |
+          printf '### Test release published\n\n[Download installers](%s). Other successful platform builds from the same source commit can append their assets to this prerelease.\n' "$RELEASE_URL" >> "$GITHUB_STEP_SUMMARY"
       - name: Link release draft for review
+        if: inputs.publish_release != true
         env:
           RELEASE_URL: ${{ steps.release.outputs.url }}
         run: |

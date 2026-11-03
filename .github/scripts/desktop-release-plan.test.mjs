@@ -46,3 +46,13 @@ test('reuses canonical and legacy drafts while rejecting ambiguous or published 
   assert.throws(() => selectDesktopRelease([{ ...canonical, draft: false }], run.head_sha), /published/)
   assert.throws(() => selectDesktopRelease([{ ...canonical, target_commitish: 'b'.repeat(40) }], run.head_sha), /another source/)
 })
+
+test('automatic publishing can append to the same mutable prerelease but never to stable or immutable releases', () => {
+  const release = { tag_name: `desktop-commit-${run.head_sha}`, target_commitish: run.head_sha, draft: false, prerelease: true }
+  const options = { allowPublishedPrerelease: true }
+  assert.equal(selectDesktopRelease([release], run.head_sha, options), release)
+  assert.throws(() => selectDesktopRelease([release], run.head_sha), /published/)
+  assert.throws(() => selectDesktopRelease([{ ...release, prerelease: false }], run.head_sha, options), /published/)
+  assert.throws(() => selectDesktopRelease([{ ...release, immutable: true }], run.head_sha, options), /published/)
+  assert.throws(() => selectDesktopRelease([{ ...release, target_commitish: 'b'.repeat(40) }], run.head_sha, options), /another source/)
+})
