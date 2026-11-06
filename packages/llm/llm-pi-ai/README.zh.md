@@ -39,7 +39,9 @@ kind: "package-reference"
 
 兼容会话复用的中转供应商可开启 `relaySessionReuse: true`，同时将系统指令变更保留为追加历史，避免重写初始提示。有会话 ID 的请求携带模型不可见的 `relay_context`，包含会话/分支、历史替换代数、调用用途和稳定请求 ID；传输重试复用 ID，新消息或控制参数变更产生新 ID。主调用、压缩、标题及其他辅助调用用途分离，分支使用独立会话 ID。未启用的供应商和无会话 ID 的调用不附带此扩展。中转必须验证身份、隔离映射并校验历史后再追加。
 
-同时设置 `relayDeltaRequests: true` 和 `relaySessionReuse: true`，可在 `openai-responses` 或 `openai-completions` 路径上只发送已确认历史之后的 HTTP 后缀。中转须支持 relay v2 并返回 `relay_ack`。Chat 仅在成功结束帧和 `[DONE]` 都收到后保存确认点，断流或失败不会推进确认点。一条助手消息可能包含多个工具调用，因此客户端消息偏移和中转规范化历史项数分别保存。重试保留原后缀和确认点；未开启该选项时仍发送完整 HTTP 历史，中转仍可提取原生会话新增内容。
+同时设置 `relayDeltaRequests: true` 和 `relaySessionReuse: true`，可在 `openai-responses`、`openai-completions` 或 `anthropic-messages` 路径上只发送已确认历史之后的 HTTP 后缀。中转须支持 relay v2 并返回 `relay_ack`。Chat 仅在成功结束帧和 `[DONE]` 都收到后保存确认点，断流或失败不会推进确认点。一条助手消息可能包含多个工具调用，因此客户端消息偏移和中转规范化历史项数分别保存。重试保留原后缀和确认点；未开启该选项时仍发送完整 HTTP 历史，中转仍可提取原生会话新增内容。
+
+Anthropic 只在成功的 `message_stop` 后提交确认点。历史原生 `tool_addition`、`tool_removal` 与所在消息的文本段共同计为一个规范项；仅含工具更新的 system 消息计一次，携带推理控制的空 system 消息也计一次。恢复旧会话时，客户端消息偏移与服务端确认点项数仍分别维护。
 
 配置 `weeklyQuotaPath` 后，如果中转因当前 API Key 无权限而返回 HTTP 403，已鉴权的额度代理会隐藏底部周额度显示。额度服务暂时故障仍显示不可用状态；权限拒绝不返回账号额度信息。
 

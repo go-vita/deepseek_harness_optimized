@@ -161,3 +161,33 @@ describe('Chat Completions relay deltas', () => {
     expect(new RelayDeltaRequest(route).prepare(payload, context('chat', 'two'))['relay_context']).toMatchObject({ mode: 'full' })
   })
 })
+
+
+describe('Anthropic historical system-update checkpoints', () => {
+  it('counts tool-only updates and effort controls before trimming the next delta', async () => {
+    const route = 'anthropic-system-updates'
+    const messages = [item('first'), { role: 'system', content: [{ type: 'tool_addition', tool: {
+      type: 'tool_definition', definition: { name: 'lookup', input_schema: { type: 'object' } },
+    } }] }, { role: 'system', content: [], output_config: { effort: 'high' } }]
+    const first = new RelayDeltaRequest(route, 'anthropic')
+    first.prepare({ messages }, context('chat', 'one'))
+    const fetch = first.wrapFetch(async () => new Response(JSON.stringify({ type: 'message', stop_reason: 'end_turn',
+      relay_ack: { version: 2, request_id: 'one', base_count: 3, base_hash: 'c'.repeat(64) },
+    }), { headers: { 'content-type': 'application/json' } }))
+    await (await fetch('http://localhost')).json()
+    const suffix = [{ role: 'assistant', content: 'reply' }, item('next'), { role: 'system', content: [
+      { type: 'tool_removal', tool: { type: 'tool_reference', name: 'lookup' } },
+    ] }]
+    const second = new RelayDeltaRequest(route, 'anthropic')
+    const delta = second.prepare({ messages: [...messages, ...suffix] }, context('chat', 'two'))
+    expect(delta['messages']).toEqual(suffix)
+    expect(delta['relay_context']).toMatchObject({ mode: 'delta', base_count: 3 })
+    const response = second.wrapFetch(async () => new Response(JSON.stringify({ type: 'message', stop_reason: 'end_turn',
+      relay_ack: { version: 2, request_id: 'two', base_count: 6, base_hash: 'd'.repeat(64) },
+    }), { headers: { 'content-type': 'application/json' } }))
+    await (await response('http://localhost')).json()
+    const last = new RelayDeltaRequest(route, 'anthropic').prepare({ messages: [...messages, ...suffix, item('after removal')] }, context('chat', 'three'))
+    expect(last['messages']).toEqual([item('after removal')])
+    expect(last['relay_context']).toMatchObject({ mode: 'delta', base_count: 6 })
+  })
+})
