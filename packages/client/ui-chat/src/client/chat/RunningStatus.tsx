@@ -9,7 +9,7 @@ import css from './ChatView.module.css'
 
 interface RunningStatusProps {
   readonly startTime: number | undefined
-  /** Freeze the shown duration while the Client cannot observe the Session. */
+  /** Connection state controls animation; elapsed time keeps advancing. */
   readonly paused: boolean
   readonly t: ChatViewSlotProps['t']
 }
@@ -22,11 +22,11 @@ interface RunningStatusProps {
 export const RunningStatus = memo(function RunningStatus({ startTime, paused, t }: RunningStatusProps) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => {
-    if (startTime === undefined || paused) return
+    if (startTime === undefined) return
     setNow(Date.now())
     const timer = setInterval(() => { setNow(Date.now()) }, LIVE_RUN_CLOCK_INTERVAL_MS)
     return () => { clearInterval(timer) }
-  }, [startTime, paused])
+  }, [startTime])
   const label = startTime === undefined ? t('chat.deepDiving') : t('chat.deepDivingFor', {
     duration: formatRunDuration(Math.max(1000, now - startTime), t).map(part => part.text).join(''),
   })
@@ -36,7 +36,7 @@ export const RunningStatus = memo(function RunningStatus({ startTime, paused, t 
       <span className={css.runningDivider} aria-hidden="true" />
       <span className={css.runningContent}>
         <RunningWhaleTail />
-        <TextShimmer active className={css.runningText}>{label}</TextShimmer>
+        <TextShimmer active={!paused} className={css.runningText}>{label}</TextShimmer>
       </span>
     </div>
   )

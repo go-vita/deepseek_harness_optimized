@@ -68,15 +68,14 @@ describe('RunningStatus', () => {
     expect(view.content()?.textContent).not.toContain('-')
   })
 
-  it('freezes the duration while paused and resumes from the Turn start', () => {
-    const view = statusHarness(1_000)
+  it('keeps the running duration advancing while reconnecting without stream chunks', () => {
+    const view = statusHarness(4_000)
+    view.set(4_000, true)
+    expect(view.content()?.textContent).toBe('深度求索中，用时 1秒 ···')
+    act(() => { vi.advanceTimersByTime(3_000) })
     expect(view.content()?.textContent).toBe('深度求索中，用时 4秒 ···')
-    view.set(1_000, true)
-    expect(vi.getTimerCount()).toBe(0)
-    act(() => { vi.advanceTimersByTime(5_000) })
+    view.set(4_000)
     expect(view.content()?.textContent).toBe('深度求索中，用时 4秒 ···')
-    view.set(1_000)
-    expect(view.content()?.textContent).toBe('深度求索中，用时 9秒 ···')
     expect(vi.getTimerCount()).toBe(1)
   })
 })

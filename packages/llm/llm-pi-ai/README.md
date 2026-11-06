@@ -285,3 +285,5 @@ This Dev Note is non-authoritative working context: undecided directions and not
 </details>
 
 Anthropic Messages relays support the same session metadata and v2 delta protocol. Discovery uses `x-api-key`, and the relay maps continuation requests to an explicit Claude CLI session. The client advances checkpoints only after a successful `message_delta` and an acknowledged final `message_stop`. Mixed text/image/tool blocks use canonical item counts; moving SDK cache breakpoints do not alter prefix identity. Official and ordinary Anthropic endpoints retain full-context requests. Both the relay and client need this update.
+
+Capability discovery uses the same provider credential source as model requests, including stored native API keys and provider authentication headers; credentials remain on the Host.

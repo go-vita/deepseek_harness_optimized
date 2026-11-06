@@ -10,7 +10,7 @@ import { memoryAuth } from './auth-double.ts'
 
 it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic'],
   ['openai-responses', 'explicit'], ['openai-responses', 'automatic'],
-  ['anthropic-messages', 'explicit'], ['anthropic-messages', 'automatic']] as const)('streams %s with %s relay transport through full, delta and byte-equivalent retries', async (api, mode) => {
+  ['anthropic-messages', 'explicit'], ['anthropic-messages', 'automatic'], ['anthropic-messages', 'native-auth']] as const)('streams %s with %s relay transport through full, delta and byte-equivalent retries', async (api, mode) => {
   let probes = 0
   const encodings: (string | undefined)[] = []
   const requests: Record<string, unknown>[] = []
@@ -26,10 +26,13 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
     request.on('data', (chunk: Buffer) => { chunks.push(chunk) })
     request.on('end', () => {
       const bytes = Buffer.concat(chunks)
-      const payload: Record<string, unknown> = JSON.parse((request.headers['content-encoding'] === 'gzip'
+      const decoded: unknown = JSON.parse((request.headers['content-encoding'] === 'gzip'
         ? gunzipSync(bytes) : bytes).toString())
+      if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded)) throw new Error('invalid fixture payload')
+      const payload = decoded as Record<string, unknown>
       requests.push(payload)
       const meta = payload['relay_context'] as Record<string, unknown>
+      if (meta === undefined) { response.writeHead(400, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: { type: 'invalid_request_error', message: 'relay_client_upgrade_required' } })); return }
       const messages = (payload['messages'] ?? payload['input']) as Record<string, unknown>[]
       const count = Number(meta['base_count'] ?? 0) + messages.length
       if (api === 'anthropic-messages') {
@@ -84,7 +87,7 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
     relayDeltaRequests: mode === 'explicit', gzipRequests: mode === 'explicit', models: [{ id: 'gpt-test' }],
   } })
   const adapter = new PiAiAdapter({ profiles: () => profiles, resolveRelayCapabilities: createRelayCapabilityResolver(),
-    resolveApiKey: () => Promise.resolve('test-key'), auth: memoryAuth() })
+    resolveApiKey: () => Promise.resolve(mode === 'native-auth' ? undefined : 'test-key'), auth: memoryAuth(mode === 'native-auth' ? { relay: { type: 'api_key', key: 'test-key' } } : {}) })
   try {
     const first = markAgentLoopRequest({ provider: 'relay', model: 'gpt-test', sessionId: SessionId('chat-sdk-delta'),
       ...api === 'anthropic-messages' ? {} : { serviceTier: 'priority' as const },
@@ -103,7 +106,7 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
     ] })
     for await (const _chunk of adapter.stream(second)) { /* drain */ }
     for await (const _chunk of adapter.stream(second)) { /* same logical request retries */ }
-    expect(probes).toBe(mode === 'automatic' ? 1 : 0)
+    expect(probes).toBe(mode !== 'explicit' ? 1 : 0)
     expect(encodings[0]).toBe('gzip')
     expect(requests).toHaveLength(3)
     expect(requests[0]?.['relay_context']).toMatchObject({ version: 2, mode: 'full' })
@@ -117,6 +120,6 @@ it.each([['openai-completions', 'explicit'], ['openai-completions', 'automatic']
     expect(requests[2]).toEqual(requests[1])
   } finally {
     server.closeAllConnections()
-    await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()) })
+    await new Promise<void>((resolve, reject) => { server.close((error) => { if (error) reject(error); else resolve() }) })
   }
 })
