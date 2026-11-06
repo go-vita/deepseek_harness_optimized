@@ -170,7 +170,7 @@ function profileOptions(
         if (serviceTier !== undefined) next['service_tier'] = serviceTier
         if (directEffort !== undefined) {
           if (model.api === 'openai-completions') {
-            if (model.compat === undefined || !('supportsReasoningEffort' in model.compat) || model.compat.supportsReasoningEffort !== false) {
+            if (model.compat === undefined || !('supportsReasoningEffort' in model.compat) || model.compat.supportsReasoningEffort) {
               next['reasoning_effort'] = directEffort
             }
           } else {
@@ -385,6 +385,27 @@ export class PiAiAdapter extends LlmAdapter {
     })
   }
 
+  /** Resolve capability-discovery credentials through the provider’s request authentication. */
+  private async relayDiscoveryKey(
+    snapshot: PiAiSnapshot, provider: string, profile: ResolvedPiAiProviderProfile,
+    key: string | undefined, signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    if (key !== undefined || !profile.baseURL || this.config.resolveRelayCapabilities === undefined) return key
+    // Native provider credentials are resolved by pi-ai, independently of apiKeyEnv.
+    // Use the same credential plane for discovery; leave request auth with pi-ai.
+    const auth = (await snapshot.models.getAuth(provider, signal === undefined ? {} : { signal }))?.auth
+    if (auth?.apiKey) return auth.apiKey
+    const headers = { ...profile.headers, ...auth?.headers }
+    for (const [name, value] of Object.entries(headers)) {
+      if (name.toLowerCase() === 'x-api-key' && typeof value === 'string') return value
+      if (name.toLowerCase() === 'authorization' && typeof value === 'string') {
+        const token = /^Bearer\s+(.+)$/i.exec(value)?.[1]
+        if (token) return token
+      }
+    }
+    return undefined
+  }
+
   /**
    * Report effective transport settings for one saved provider without generating content.
    * @param provider - Saved provider route.
@@ -400,7 +421,7 @@ export class PiAiAdapter extends LlmAdapter {
     const snapshot = this.current()
     const profile = this.profileOf(snapshot, provider)
     const api = snapshot.models.getModels(provider)[0]?.api ?? profile.api
-    const key = await this.config.resolveApiKey(provider, profile)
+    const key = await this.relayDiscoveryKey(snapshot, provider, profile, await this.config.resolveApiKey(provider, profile), signal)
     const required = await this.config.resolveRelayCapabilities?.(profile, key, signal, api) ?? false
     if (required) this.autoRelayProfiles.add(profile)
     return { required, sessionReuse: required || profile.relaySessionReuse === true,
@@ -411,7 +432,7 @@ export class PiAiAdapter extends LlmAdapter {
     if (this.config.resolveRelayCapabilities === undefined) return
     const profile = this.profileOf(snapshot, provider)
     if (profile.relaySessionReuse && profile.relayDeltaRequests && profile.gzipRequests) return
-    const key = await this.config.resolveApiKey(provider, profile)
+    const key = await this.relayDiscoveryKey(snapshot, provider, profile, await this.config.resolveApiKey(provider, profile), signal)
     const required = await this.config.resolveRelayCapabilities(profile, key, signal, this.modelOf(snapshot, provider, model).api)
     if (required) this.autoRelayProfiles.add(profile)
   }
@@ -465,10 +486,12 @@ export class PiAiAdapter extends LlmAdapter {
     let profile = this.profileOf(snapshot, options.provider)
     const selectedModel = this.modelOf(snapshot, options.provider, options.model)
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
-    if (!(profile.relaySessionReuse && profile.relayDeltaRequests && profile.gzipRequests)
-      && await this.config.resolveRelayCapabilities?.(profile, apiKey, options.signal, selectedModel.api)) {
-      this.autoRelayProfiles.add(profile)
-      profile = { ...profile, relaySessionReuse: true, relayDeltaRequests: true, gzipRequests: true }
+    if (!(profile.relaySessionReuse && profile.relayDeltaRequests && profile.gzipRequests)) {
+      const relayKey = apiKey ?? await this.relayDiscoveryKey(snapshot, options.provider, profile, apiKey, options.signal)
+      if (await this.config.resolveRelayCapabilities?.(profile, relayKey, options.signal, selectedModel.api)) {
+        this.autoRelayProfiles.add(profile)
+        profile = { ...profile, relaySessionReuse: true, relayDeltaRequests: true, gzipRequests: true }
+      }
     }
     const model = this.modelOf(snapshot, options.provider, options.model)
     const updates = conversationUpdates(model)
