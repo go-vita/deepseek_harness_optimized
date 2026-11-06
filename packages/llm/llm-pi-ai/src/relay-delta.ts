@@ -35,7 +35,7 @@ function anthropicItemCount(messages: Item[]): number {
     let count = 0
     let run = false
     for (const block of content) {
-      if (block.type === 'text' || block.type === 'image') run = true
+      if (block.type === 'text' || block.type === 'image' || block.type === 'tool_addition' || block.type === 'tool_removal') run = true
       else if (block.type === 'tool_use' || block.type === 'tool_result') {
         count += (run ? 1 : 0) + 1
         run = false
