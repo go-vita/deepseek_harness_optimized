@@ -3764,7 +3764,7 @@ describe('ChatView', () => {
     expect(vi.getTimerCount()).toBe(0)
   }))
 
-  it('the running clock freezes while the connection is recovering', withClock(10_000, () => {
+  it('the running clock keeps advancing while the connection is recovering', withClock(10_000, () => {
     const h = makeHarness(
       { nodes: [{ ...userInTurn(1, 'go', 1), time: 2_000 }], turnTimings: new Map([[1, { startTime: 1_000 }]]) },
       { running: true },
@@ -3774,12 +3774,30 @@ describe('ChatView', () => {
     expect(content.textContent).toBe('深度求索中，用时 9秒 ···')
     act(() => { h.setConnection('connecting') })
     act(() => { vi.advanceTimersByTime(5_000) })
-    expect(content.textContent).toBe('深度求索中，用时 9秒 ···')
+    expect(content.textContent).toBe('深度求索中，用时 14秒 ···')
     act(() => { h.setConnection('disconnected') })
     act(() => { vi.advanceTimersByTime(5_000) })
-    expect(content.textContent).toBe('深度求索中，用时 9秒 ···')
+    expect(content.textContent).toBe('深度求索中，用时 19秒 ···')
     act(() => { h.setConnection('connected') })
     expect(content.textContent).toBe('深度求索中，用时 19秒 ···')
+  }))
+
+  it('uses the Host follow clock when the Client clock is eight hours behind', withClock(10_000, () => {
+    const hostTime = Date.now() + 8 * 3_600_000
+    const startTime = hostTime - 5_000
+    const h = makeHarness(
+      { nodes: [{ ...userInTurn(1, 'go', 1), time: startTime + 1 }], turnTimings: new Map([[1, { startTime }]]) },
+      { running: true, clock: { hostTime, receivedAt: performance.now() } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+    const content = runningContent(view.container)!
+    expect(content.textContent).toBe('深度求索中，用时 5秒 ···')
+    act(() => { vi.advanceTimersByTime(5_000) })
+    expect(content.textContent).toBe('深度求索中，用时 10秒 ···')
+    act(() => { h.setSession({ clock: { hostTime: hostTime + 5_000, receivedAt: performance.now() } }) })
+    expect(content.textContent).toBe('深度求索中，用时 10秒 ···')
+    act(() => { vi.advanceTimersByTime(5_000) })
+    expect(content.textContent).toBe('深度求索中，用时 15秒 ···')
   }))
 
   it('the running clock reads hours once the turn passes an hour', withClock(3_600_000, () => {

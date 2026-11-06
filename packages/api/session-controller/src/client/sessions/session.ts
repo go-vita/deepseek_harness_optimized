@@ -22,7 +22,7 @@ import type {
   BeginSubmissionInput, PendingSubmissionRetirement, SessionFace, SubmissionHandle,
 } from '../contract/session.ts'
 import type {
-  OpenState, PendingSubmission, PromptError, SessionSnapshot,
+  OpenState, PendingSubmission, PromptError, SessionClockSample, SessionSnapshot,
 } from '../contract/snapshot.ts'
 import { MutableSessionEventSource } from '../contract/events.ts'
 import type {
@@ -112,6 +112,7 @@ export class Session implements SessionFace {
   private readonly stopObservingInbox: () => void
   private readonly assistantStream = new ClientAssistantStream()
   private running = false
+  private clock: SessionClockSample | undefined
   private address: SubagentAddress | undefined
   private parentAvailable: boolean | undefined
   /**
@@ -646,6 +647,9 @@ export class Session implements SessionFace {
   private acceptEventChange(change: SessionJournalChange): void {
     switch (change.type) {
       case 'replace':
+        if (change.page.clock !== undefined || change.page.assistantStream !== undefined) {
+          this.clock = change.page.clock
+        }
         this.installWindow(
           change.entries,
           change.hasMore,
@@ -889,6 +893,7 @@ export class Session implements SessionFace {
     const identity = this.projections.values().subagent
     return {
       sessionId: this.sessionId,
+      ...this.clock === undefined ? {} : { clock: this.clock },
       pendingSubmissions: this.pendingSubmissions,
       running: this.running,
       subagent: this.address === undefined

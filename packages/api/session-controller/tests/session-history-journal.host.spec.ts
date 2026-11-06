@@ -116,7 +116,7 @@ describe('Session history raw journal', () => {
 
     await expect(iterator.next()).resolves.toMatchObject({
       done: false,
-      value: { type: 'snapshot', assistantStream: { revision: 0 } },
+      value: { type: 'snapshot', serverTime: expect.any(Number), assistantStream: { revision: 0 } },
     })
     abort.abort()
     await iterator.next()
