@@ -10,8 +10,6 @@ Desktop product events use the optional [product analytics service](../product-a
 
 ## Summary
 
-Once the open Turn start is known, the running indicator advances on a local timer through upstream silence and client reconnection. Connection state pauses its activity animation, not elapsed time.
-
 Use this package to render a browser chat from recorded Session conversations, including historical images, localized actions, and restored scroll position. Work-details modes control reasoning previews and process visibility without hiding Assistant replies; Verbose keeps completed-turn process rows visible. Local transcript and steering submissions appear immediately, remain in their original surface, and disappear atomically when authoritative Session records arrive, while queued submissions stay outside Chat. The package does not assemble or modify model requests.
 
 File-mention providers receive the viewed Session ID with the closing-turn owner, so links into inherited history can address the fork itself.
@@ -91,6 +89,8 @@ The completed-turn action footer follows the recorded Turn end. Its action row s
 
 <a id="turn-process-folding"></a>
 ## Turn Process Folding
+
+Once the open Turn start is known, the running indicator advances on a local timer through upstream silence and client reconnection. Connection state pauses its activity animation, not elapsed time.
 
 During uninterrupted following, local transcript and steering echoes remain mounted through Inbox acceptance and claim until the durable message arrives, without triggering tail following twice. Pending steering follows Inbox order across clients, using matching local echoes in place. Admitted local steering also suppresses matching stale Inbox rows until the claim projection arrives; steering without a locally tracked submission continues to follow the Inbox projection. After reconnect, Host-owned rows replace receipt-confirmed local echoes; a claim awaiting admission may briefly have no bubble.
 
