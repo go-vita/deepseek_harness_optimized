@@ -31,6 +31,7 @@ export const ChatFlow = memo(function ChatFlow({
 }: ChatFlowSlotProps) {
   const nodeStore = useChat(snapshot => snapshot.nodes)
   const running = useSession(snapshot => snapshot.running)
+  const clock = useSession(snapshot => snapshot.clock)
   const disconnected = useConnectionState(state => state === 'disconnected' || state === 'connecting')
   const latestTurnAnchor = useChat(snapshot => snapshot.navigation.items().at(-1)?.anchorKey)
   const runningStartTime = useChatNode(latestTurnAnchor ?? '', (node) => {
@@ -86,7 +87,8 @@ export const ChatFlow = memo(function ChatFlow({
   // Rows enter before the keyed status and echoes after it, so React never moves its DOM node.
   return [
     ...rows, ...leadingRows, ...openingRows,
-    ...running ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected} t={t} />] : [],
+    ...running ? [<RunningStatus key="running" startTime={runningStartTime} paused={disconnected} t={t}
+      {...clock === undefined ? {} : { clock }} />] : [],
     ...pendingRows,
   ]
 })

@@ -65,9 +65,17 @@ export interface PromptError {
   readonly error: RemoteFailure
 }
 
+/** One Host epoch sample paired with its receipt on the Client's monotonic clock. */
+export interface SessionClockSample {
+  readonly hostTime: number
+  readonly receivedAt: number
+}
+
 /** Immutable Session lifecycle and control snapshot. */
 export interface SessionSnapshot {
   readonly sessionId: SessionId
+  /** Volatile follow metadata; never persisted as Session history. */
+  readonly clock?: SessionClockSample
   /** Local prompt-submission echoes not yet observed as durable events or queue occurrences. */
   readonly pendingSubmissions: readonly PendingSubmission[]
   readonly running: boolean

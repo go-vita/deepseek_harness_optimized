@@ -41,6 +41,30 @@ function eventSeqs(session: Session): number[] {
 }
 
 describe('Session open', () => {
+  it('pairs Host time with local monotonic receipt and refreshes it on resync', async ({ mock, start }) => {
+    const session = await sessionBench(mock, start, SID)
+    let hostTime: number | undefined = 100_000
+    mock.stream(FOLLOW, ([request], stream) => {
+      stream.push({
+        ...followSnapshot(historyValue([]), request as SessionFollowRequest),
+        ...hostTime === undefined ? {} : { serverTime: hostTime },
+      })
+    })
+    const before = performance.now()
+    await session.open()
+    const first = session.getSnapshot().clock!
+    expect(first.hostTime).toBe(hostTime)
+    expect(first.receivedAt).toBeGreaterThanOrEqual(before)
+    expect(first.receivedAt).toBeLessThanOrEqual(performance.now())
+    hostTime += 30_000
+    await session.resync()
+    expect(session.getSnapshot().clock).toMatchObject({ hostTime })
+    expect(session.getSnapshot().clock).not.toBe(first)
+    hostTime = undefined
+    await session.resync()
+    expect(session.getSnapshot().clock).toBeUndefined()
+  })
+
   it('rejects a second scope binding until the owned scope is unbound', async ({ mock, start }) => {
     const session = await sessionBench(mock, start, SID)
     const client = await start()

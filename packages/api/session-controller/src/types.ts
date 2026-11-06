@@ -544,6 +544,8 @@ export interface SessionPage {
 export type SessionFollowFrame =
   | {
     readonly type: 'snapshot'
+    /** Host epoch milliseconds sampled when this opening frame is emitted. */
+    readonly serverTime?: number
     readonly header: SessionWireHeader
     readonly cursor: number
     readonly records: readonly SessionHistoryRecord[]

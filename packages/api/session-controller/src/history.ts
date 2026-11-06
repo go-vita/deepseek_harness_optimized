@@ -192,6 +192,7 @@ export class SessionHistoryController {
       const assistantStreamOrdinalCut = assistantStreamOrdinal
       yield {
         type: 'snapshot',
+        serverTime: Date.now(),
         header: wireHeader(source.header),
         cursor,
         records: pageRecords(page.events),

@@ -73,6 +73,7 @@ export type {
   PendingSubmissionImageAttachment,
   PendingSubmissionPlacement,
   PromptError,
+  SessionClockSample,
   SessionSnapshot,
 } from './contract/snapshot.ts'
 

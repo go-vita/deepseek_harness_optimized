@@ -27,6 +27,7 @@ import {
 } from './sessions/history-records.ts'
 import type { SessionEventLikeEntry, SessionLiveEventEntry } from './contract/events.ts'
 import type { SessionRemotes } from './sessions/remotes.ts'
+import type { SessionClockSample } from './contract/snapshot.ts'
 import { assertSessionWireEvent } from './session-wire-event.ts'
 
 export {
@@ -42,6 +43,7 @@ export type SessionRemote = ClientRemote['session']
 
 /** Opening metadata carried only by a follow snapshot, never by loadOlder pages. */
 interface SessionJournalPage extends SessionPage {
+  readonly clock?: SessionClockSample
   readonly projections?: SessionProjectionBaseline
   readonly assistantStream?: SessionAssistantStreamBaseline
 }
@@ -195,6 +197,9 @@ export class SessionEventStream extends RemoteJournalStream<
           type: 'opened',
           cursor: frame.cursor,
           page: {
+            ...typeof frame.serverTime === 'number' && Number.isFinite(frame.serverTime)
+              ? { clock: { hostTime: frame.serverTime, receivedAt: performance.now() } }
+              : {},
             records: frame.records,
             hasMore: frame.hasMore,
             projections: frame.projections,

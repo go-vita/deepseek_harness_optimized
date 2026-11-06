@@ -90,7 +90,7 @@ The completed-turn action footer follows the recorded Turn end. Its action row s
 <a id="turn-process-folding"></a>
 ## Turn Process Folding
 
-Once the open Turn start is known, the running indicator advances on a local timer through upstream silence and client reconnection. Connection state pauses its activity animation, not elapsed time.
+Once the open Turn start is known, the running indicator computes initial elapsed time from the Host clock sample in the follow snapshot, then advances with the Client's monotonic clock. Different Host and Client wall clocks, later wall-clock changes, and upstream silence cannot freeze it at one second. Reopening or reconnecting uses a fresh Host sample to retain elapsed time. Older Hosts without the optional sample use a clamped initial wall-clock estimate, then monotonic increments. Connection state pauses activity animation only.
 
 During uninterrupted following, local transcript and steering echoes remain mounted through Inbox acceptance and claim until the durable message arrives, without triggering tail following twice. Pending steering follows Inbox order across clients, using matching local echoes in place. Admitted local steering also suppresses matching stale Inbox rows until the claim projection arrives; steering without a locally tracked submission continues to follow the Inbox projection. After reconnect, Host-owned rows replace receipt-confirmed local echoes; a claim awaiting admission may briefly have no bubble.
 
